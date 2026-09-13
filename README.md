@@ -37,8 +37,6 @@ Para mantener el código organizado y modular, el repositorio sigue la estructur
 | 📚 **`lib/`** | Librerías locales específicas del proyecto (ej. `ControladorServos`, `TecladoLCD`, `UartEsclavo`). |
 | ⚙️ **`include/`** | Archivos de cabecera (`.h`) para configuraciones globales, pines (ej. `pines_mega.h`) y mapa de hardware. |
 
-*(Nota: A diferencia del ESP32, el Arduino Mega no utiliza carpeta `data/` porque no maneja un sistema de archivos para web).*
-
 ---
 
 ## Subgrupo Arduino
