@@ -19,6 +19,16 @@ void VmUartLink::onFrame(FrameCallback callback) {
     _callback = callback;
 }
 
+void VmUartLink::poll() {
+    if (_serial == nullptr) {
+        return;
+    }
+
+    while (_serial->available() > 0) {
+        handleByte((uint8_t)_serial->read());
+    }
+}
+
 uint8_t VmUartLink::nextSeq() {
     uint8_t seq = _txSeq;
     _txSeq = (uint8_t)(_txSeq + 1);  // incremento módulo 256 (2.5)
@@ -35,19 +45,6 @@ void VmUartLink::resetParser() {
     _seq = 0;
     _len = 0;
     _payloadIndex = 0;
-}
-
-void VmUartLink::poll() {
-    if (_serial == nullptr) {
-        return;
-    }
-    while (_serial->available() > 0) {
-        int b = _serial->read();
-        if (b < 0) {
-            break;
-        }
-        handleByte((uint8_t)b);
-    }
 }
 
 void VmUartLink::handleByte(uint8_t b) {

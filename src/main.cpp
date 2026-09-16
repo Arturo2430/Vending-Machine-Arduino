@@ -21,33 +21,72 @@
 #include "vm_uart_link.h"
 #include "vm_record_store.h"
 #include "vm_mega_controller.h"
+#include "vm_motor_controller.h"
 
 VmUartLink uartLink;
 VmRecordStore recordStore;
 VmMegaController controller;
+VmMotorController motorController;
+
+void motorStop();
+bool motorIsBusy();
+bool motorStart(uint8_t channel);
+void motorPoll();
+int motorConsumeResult();
 
 void setup() {
-    Serial.begin(115200);  // USB de diagnóstico
+    Serial.begin(115200);
     delay(1000);
 
-    Serial.println("--- MEGA (Eder: UART v2 / puerta / barrera / EEPROM) ---");
+    Serial.println("--- MEGA (UART v2 / motores DC / PCA9685) ---");
 
-    // Enlace UART con el ESP32.
+    pinMode(VM_PIN_BARRIER, INPUT_PULLUP);
+    pinMode(VM_PIN_DOOR, INPUT_PULLUP);
+
+    motorController.begin();
+
+    VmMegaController::DispenserHooks hooks = {
+        motorStop,
+        motorIsBusy,
+        motorStart,
+        motorPoll,
+        motorConsumeResult
+    };
+
     Serial1.begin(VM_UART_BAUDRATE);
     uartLink.begin(Serial1);
 
-    // Controlador esclavo: recupera registro EEPROM, queda en
-    // MODE_MANTENIMIENTO y concilia una orden "en progreso" si la hubo.
+    controller.setDispenser(hooks);
     controller.begin(uartLink, recordStore);
-
-    // Handshake de arranque identificándose como ROLE_MEGA.
     controller.sendHelloHandshake();
 
     Serial.print("[MEGA] Modo inicial: ");
-    Serial.println(controller.getMode() == VM_MODE_VENTA ? "VENTA" : "MANTENIMIENTO");
+    Serial.println(
+        controller.getMode() == VM_MODE_VENTA
+            ? "VENTA"
+            : "MANTENIMIENTO"
+    );
 }
 
 void loop() {
     // Consume tramas UART y avanza el ciclo no bloqueante.
     controller.poll();
+}
+void motorStop() {
+    motorController.stop();
+}
+bool motorIsBusy() {
+    return motorController.isBusy();
+}
+
+bool motorStart(uint8_t channel) {
+    return motorController.start(channel);
+}
+
+void motorPoll() {
+    motorController.poll();
+}
+
+int motorConsumeResult() {
+    return motorController.consumeResult();
 }

@@ -10,7 +10,7 @@ VmMegaController* VmMegaController::s_instance = nullptr;
 VmMegaController::VmMegaController()
     : _link(nullptr),
       _store(nullptr),
-      _dispenser{nullptr, nullptr, nullptr, nullptr},
+      _dispenser{nullptr, nullptr, nullptr, nullptr, nullptr},
       _displaySink(nullptr),
       _mode(VM_MODE_MANTENIMIENTO),   // UART-REQ-003: arranque en mantenimiento
       _keySeq(0),
@@ -54,8 +54,16 @@ void VmMegaController::poll() {
     if (_link == nullptr) {
         return;
     }
+
     _link->poll();
     updateDoor();
+
+    if (_orderInProgress &&
+        !_doorStable &&
+        _dispenser.stop != nullptr) {
+        _dispenser.stop();
+    }
+
     updateOrder();
 }
 

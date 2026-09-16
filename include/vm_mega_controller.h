@@ -39,6 +39,7 @@ public:
      *                  0 = DELIVERED, 2 = UNCERTAIN.
      */
     struct DispenserHooks {
+        void (*stop)(void);
         bool (*isBusy)(void);
         bool (*startDispense)(uint8_t channel);
         void (*poll)(void);
