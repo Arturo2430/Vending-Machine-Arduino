@@ -32,6 +32,32 @@
 #define VM_PIN_BARRIER           2u   // Barrera óptica de caída (entrada)
 #define VM_PIN_DOOR              3u   // Sensor de puerta cerrada (entrada)
 
+/* ============================================================
+ * RC522 RFID (SPI hardware del Mega)
+ * ============================================================
+ */
+#define VM_PIN_RFID_SS           53u
+#define VM_PIN_RFID_RST          8u
+#define VM_RFID_ACK_TIMEOUT_MS   1000u
+#define VM_RFID_RETRY_COOLDOWN_MS 1000u
+
+/* ============================================================
+ * Teclado 4x4
+ * ============================================================
+ */
+#define VM_KEYPAD_ROWS           4u
+#define VM_KEYPAD_COLS           4u
+#define VM_KEYPAD_DEBOUNCE_MS    25u
+
+#define VM_KEYPAD_ROW_0          22u
+#define VM_KEYPAD_ROW_1          23u
+#define VM_KEYPAD_ROW_2          24u
+#define VM_KEYPAD_ROW_3          25u
+#define VM_KEYPAD_COL_0          26u
+#define VM_KEYPAD_COL_1          27u
+#define VM_KEYPAD_COL_2          28u
+#define VM_KEYPAD_COL_3          29u
+
 // Nivel lógico activo de cada sensor (lo define Electrónica).
 // Ajustar aquí si el sensor es activo-alto en lugar de activo-bajo.
 #define VM_BARRIER_OCCUPIED_LEVEL LOW

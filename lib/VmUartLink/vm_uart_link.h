@@ -3,7 +3,7 @@
  * @brief Capa de enlace UART: armado, envío y parseo de tramas del
  *        protocolo VM (Vending Machine), ESP32 <-> Arduino Mega.
  *
- * Basado en: Contrato UART, Ver. 2.0.0 FINAL (12/09/2026), secciones
+ * Basado en: Contrato UART, Ver. 2.1.0 (21/09/2026), secciones
  * 2 (convenciones de datos) y 3 (formato general del frame).
  *
  * Este módulo NO conoce reglas de negocio: no valida canales de VEND,
@@ -91,14 +91,17 @@ public:
     void sendKey(uint8_t seq, uint8_t keyAscii, uint8_t keySeq);
 
     /**
-     * line1 y line2 deben tener exactamente VM_DISPLAY_LINE_LEN (16)
+    * line1 a line4 deben tener exactamente VM_DISPLAY_LINE_LEN (20)
      * bytes cada uno. Usa vm_padDisplayLine() si tu texto original es
      * más corto o contiene caracteres fuera de rango ASCII imprimible.
      */
     void sendDisplay(uint8_t seq, const char line1[VM_DISPLAY_LINE_LEN],
-                      const char line2[VM_DISPLAY_LINE_LEN]);
+                  const char line2[VM_DISPLAY_LINE_LEN],
+                  const char line3[VM_DISPLAY_LINE_LEN],
+                  const char line4[VM_DISPLAY_LINE_LEN]);
     void sendVend(uint8_t seq, uint8_t channel, uint32_t transactionId);
     void sendResult(uint8_t seq, uint32_t transactionId, uint8_t result);
+    void sendRfidCard(uint8_t seq, const uint8_t* uidAscii, uint8_t uidLen);
 
     // ------------------------------------------------------------
     // Utilidades de codificación (independientes de la instancia)

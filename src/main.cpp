@@ -16,6 +16,8 @@
  */
 
 #include <Arduino.h>
+#include <Keypad.h>
+#include <LiquidCrystal_I2C.h>
 #include "vm_board_config.h"
 #include "vm_uart_protocol.h"
 #include "vm_uart_link.h"
@@ -27,6 +29,38 @@ VmUartLink uartLink;
 VmRecordStore recordStore;
 VmMegaController controller;
 VmMotorController motorController;
+LiquidCrystal_I2C lcd(0x27, VM_DISPLAY_LINE_LEN, VM_DISPLAY_LINE_COUNT);
+
+char keypadMap[VM_KEYPAD_ROWS][VM_KEYPAD_COLS] = {
+    { '1', '2', '3', 'A' },
+    { '4', '5', '6', 'B' },
+    { '7', '8', '9', 'C' },
+    { '*', '0', '#', 'D' }
+};
+
+byte keypadRows[VM_KEYPAD_ROWS] = {
+    VM_KEYPAD_ROW_0, VM_KEYPAD_ROW_1, VM_KEYPAD_ROW_2, VM_KEYPAD_ROW_3
+};
+
+byte keypadCols[VM_KEYPAD_COLS] = {
+    VM_KEYPAD_COL_0, VM_KEYPAD_COL_1, VM_KEYPAD_COL_2, VM_KEYPAD_COL_3
+};
+
+Keypad keypad = Keypad(makeKeymap(keypadMap), keypadRows, keypadCols,
+                       VM_KEYPAD_ROWS, VM_KEYPAD_COLS);
+
+void displaySink(const char* line1, const char* line2,
+                 const char* line3, const char* line4) {
+    const char* lines[VM_DISPLAY_LINE_COUNT] = { line1, line2, line3, line4 };
+
+    lcd.clear();
+    for (uint8_t row = 0; row < VM_DISPLAY_LINE_COUNT; row++) {
+        lcd.setCursor(0, row);
+        for (uint8_t column = 0; column < VM_DISPLAY_LINE_LEN; column++) {
+            lcd.write((uint8_t)lines[row][column]);
+        }
+    }
+}
 
 void motorStop();
 bool motorIsBusy();
@@ -36,14 +70,19 @@ int motorConsumeResult();
 
 void setup() {
     Serial.begin(115200);
-    delay(1000);
 
     Serial.println("--- MEGA (UART v2 / motores DC / PCA9685) ---");
 
     pinMode(VM_PIN_BARRIER, INPUT_PULLUP);
     pinMode(VM_PIN_DOOR, INPUT_PULLUP);
 
+    Wire.begin();
+    lcd.init();
+    lcd.backlight();
+
     motorController.begin();
+    controller.beginRfid();
+    keypad.setDebounceTime(VM_KEYPAD_DEBOUNCE_MS);
 
     VmMegaController::DispenserHooks hooks = {
         motorStop,
@@ -57,6 +96,7 @@ void setup() {
     uartLink.begin(Serial1);
 
     controller.setDispenser(hooks);
+    controller.setDisplaySink(displaySink);
     controller.begin(uartLink, recordStore);
     controller.sendHelloHandshake();
 
@@ -71,6 +111,11 @@ void setup() {
 void loop() {
     // Consume tramas UART y avanza el ciclo no bloqueante.
     controller.poll();
+
+    char key = keypad.getKey();
+    if (key != NO_KEY) {
+        controller.sendKeyEvent(key);
+    }
 }
 void motorStop() {
     motorController.stop();

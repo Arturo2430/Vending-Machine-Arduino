@@ -23,6 +23,7 @@
 #define VM_MEGA_CONTROLLER_H
 
 #include <Arduino.h>
+#include <MFRC522.h>
 #include "vm_uart_protocol.h"
 #include "vm_uart_link.h"
 #include "vm_record_store.h"
@@ -46,8 +47,9 @@ public:
         int  (*consumeResult)(void);
     };
 
-    /** Destino del texto DISPLAY (LCD 16x2, de Hugo). Opcional. */
-    typedef void (*DisplaySink)(const char* line1, const char* line2);
+    /** Destino del texto DISPLAY (LCD 20x4, de Hugo). Opcional. */
+    typedef void (*DisplaySink)(const char* line1, const char* line2,
+                                const char* line3, const char* line4);
 
     VmMegaController();
 
@@ -75,6 +77,9 @@ public:
 
     /** Envía HELLO identificándose como ROLE_MEGA (para arranque). */
     void sendHelloHandshake();
+
+    /** Inicializa el lector RC522 conectado al SPI hardware del Mega. */
+    void beginRfid();
 
     /**
      * Envía el mensaje KEY de una tecla estable con su contador local
@@ -122,6 +127,7 @@ private:
                                 const uint8_t* payload, uint8_t len);
 
     void handleHello(uint8_t seq);
+    void handleAck(const uint8_t* payload, uint8_t len);
     void handleStatus(uint8_t seq, const uint8_t* payload, uint8_t len);
     void handleSetMode(uint8_t seq, const uint8_t* payload, uint8_t len);
     void handleHeartbeat(uint8_t seq, const uint8_t* payload, uint8_t len);
@@ -140,6 +146,15 @@ private:
     void refreshRecord();
 
     bool dispenserBusy() const;
+    void pollRfid();
+    bool isRfidHex(uint8_t value) const;
+
+    MFRC522 _rfid;
+    bool _rfidAwaitingAck;
+    uint32_t _rfidAckStartedMs;
+    uint32_t _rfidCooldownUntilMs;
+    uint8_t _rfidUid[VM_RFID_UID_MAX];
+    uint8_t _rfidUidLen;
 };
 
 #endif // VM_MEGA_CONTROLLER_H

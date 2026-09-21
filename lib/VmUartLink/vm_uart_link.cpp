@@ -190,10 +190,14 @@ void VmUartLink::sendKey(uint8_t seq, uint8_t keyAscii, uint8_t keySeq) {
 }
 
 void VmUartLink::sendDisplay(uint8_t seq, const char line1[VM_DISPLAY_LINE_LEN],
-                              const char line2[VM_DISPLAY_LINE_LEN]) {
+                              const char line2[VM_DISPLAY_LINE_LEN],
+                              const char line3[VM_DISPLAY_LINE_LEN],
+                              const char line4[VM_DISPLAY_LINE_LEN]) {
     uint8_t payload[VM_LEN_DISPLAY];
-    memcpy(payload, line1, VM_DISPLAY_LINE_LEN);
-    memcpy(payload + VM_DISPLAY_LINE_LEN, line2, VM_DISPLAY_LINE_LEN);
+    memcpy(payload + 0 * VM_DISPLAY_LINE_LEN, line1, VM_DISPLAY_LINE_LEN);
+    memcpy(payload + 1 * VM_DISPLAY_LINE_LEN, line2, VM_DISPLAY_LINE_LEN);
+    memcpy(payload + 2 * VM_DISPLAY_LINE_LEN, line3, VM_DISPLAY_LINE_LEN);
+    memcpy(payload + 3 * VM_DISPLAY_LINE_LEN, line4, VM_DISPLAY_LINE_LEN);
     sendFrame(VM_CMD_DISPLAY, seq, payload, VM_LEN_DISPLAY);
 }
 
@@ -209,6 +213,21 @@ void VmUartLink::sendResult(uint8_t seq, uint32_t transactionId, uint8_t result)
     encodeU32LE(transactionId, &payload[0]);
     payload[4] = result;
     sendFrame(VM_CMD_RESULT, seq, payload, VM_LEN_RESULT);
+}
+
+void VmUartLink::sendRfidCard(uint8_t seq, const uint8_t* uidAscii, uint8_t uidLen) {
+    if (uidAscii == nullptr || uidLen < VM_RFID_UID_MIN || uidLen > VM_RFID_UID_MAX) {
+        return;
+    }
+    for (uint8_t index = 0; index < uidLen; index++) {
+        uint8_t value = uidAscii[index];
+        bool isDigit = value >= '0' && value <= '9';
+        bool isUpperHex = value >= 'A' && value <= 'F';
+        if (!isDigit && !isUpperHex) {
+            return;
+        }
+    }
+    sendFrame(VM_CMD_RFID_CARD, seq, uidAscii, uidLen);
 }
 
 // ------------------------------------------------------------
@@ -239,6 +258,9 @@ int16_t VmUartLink::expectedPayloadLen(uint8_t cmd) {
         case VM_CMD_DISPLAY:   return VM_LEN_DISPLAY;
         case VM_CMD_VEND:      return VM_LEN_VEND;
         case VM_CMD_RESULT:    return VM_LEN_RESULT;
+            case VM_CMD_RFID_CARD:
+                // RFID_CARD usa UID ASCII de longitud variable (1..20 bytes).
+                return -1;
         case VM_CMD_STATUS:
             // Longitud depende de si es solicitud (0) o respuesta (7);
             // el llamador debe resolverlo según su rol/dirección.

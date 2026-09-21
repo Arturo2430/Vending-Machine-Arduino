@@ -4,7 +4,7 @@
  *        UART de la máquina expendedora (VM = Vending Machine),
  *        ESP32 <-> Arduino Mega.
  *
- * Basado en: Contrato UART, Ver. 2.0.0 FINAL (12/09/2026)
+ * Basado en: Contrato UART, Ver. 2.1.0 FINAL (12/09/2026)
  *
  * Este archivo debe mantenerse IDÉNTICO en el firmware del ESP32 y en el
  * firmware del Arduino Mega. Cualquier cambio aquí debe reflejarse en
@@ -25,9 +25,9 @@
 #define VM_PROTO_VERSION         0x02u  // Versión mayor del protocolo
 
 #define VM_HEADER_LEN            6u     // SOF1+SOF2+PROTO+CMD+SEQ+LEN
-#define VM_MAX_PAYLOAD_LEN       32u    // LEN máximo permitido
+#define VM_MAX_PAYLOAD_LEN       80u    // LEN máximo permitido (v2.1.0)
 #define VM_MIN_FRAME_LEN         (VM_HEADER_LEN)                     // 6 bytes, LEN=0
-#define VM_MAX_FRAME_LEN         (VM_HEADER_LEN + VM_MAX_PAYLOAD_LEN) // 38 bytes
+#define VM_MAX_FRAME_LEN         (VM_HEADER_LEN + VM_MAX_PAYLOAD_LEN) // 86 bytes
 
 // Offsets dentro de la trama (útiles para el parser)
 #define VM_OFFSET_SOF1           0u
@@ -51,7 +51,8 @@ typedef enum {
     VM_CMD_KEY        = 0x10,  // Mega -> ESP32
     VM_CMD_DISPLAY    = 0x11,  // ESP32 -> Mega
     VM_CMD_VEND       = 0x12,  // ESP32 -> Mega
-    VM_CMD_RESULT     = 0x13   // Mega -> ESP32
+        VM_CMD_RESULT     = 0x13,  // Mega -> ESP32
+        VM_CMD_RFID_CARD  = 0x14   // Mega -> ESP32 (v2.1.0: nuevo comando)
 } vm_cmd_t;
 
 /* ============================================================
@@ -148,11 +149,13 @@ typedef enum {
 #define VM_LEN_SET_MODE          1u   // mode
 #define VM_LEN_HEARTBEAT         0u
 #define VM_LEN_KEY               2u   // key_ascii, key_seq
-#define VM_LEN_DISPLAY           32u  // line1[16] + line2[16]
 #define VM_LEN_VEND              5u   // channel, tx_id(4)
 #define VM_LEN_RESULT            5u   // tx_id(4), result
 
-#define VM_DISPLAY_LINE_LEN      16u  // Longitud fija por línea de LCD
+#define VM_LEN_DISPLAY           80u   // line1[20] + line2[20] + line3[20] + line4[20]
+
+#define VM_DISPLAY_LINE_LEN      20u  // Longitud fija por línea de LCD (v2.1.0: 16 -> 20)
+#define VM_DISPLAY_LINE_COUNT    4u   // Número de líneas (v2.1.0: nuevo)
 #define VM_DISPLAY_PAD_CHAR      0x20u // Espacio ASCII de relleno
 #define VM_DISPLAY_INVALID_CHAR  0x3Fu // '?' para fuera de rango ASCII imprimible
 #define VM_DISPLAY_ASCII_MIN     0x20u // Rango ASCII imprimible: 0x20-0x7E
@@ -163,7 +166,7 @@ typedef enum {
  * ============================================================ */
 
 #define VM_HELLO_VERSION_MAJOR   2u
-#define VM_HELLO_VERSION_MINOR   0u
+#define VM_HELLO_VERSION_MINOR   1u
 
 /* ============================================================
  * RANGO DE CANALES DE DISPENSADO (VEND)
@@ -171,6 +174,13 @@ typedef enum {
 
 #define VM_CHANNEL_MIN           1u
 #define VM_CHANNEL_MAX           4u
+
+/* ============================================================
+ * RANGO DE LONGITUD DE UID EN RFID_CARD (v2.1.0)
+ * ============================================================ */
+
+#define VM_RFID_UID_MIN          1u
+#define VM_RFID_UID_MAX          20u
 
 /* ============================================================
  * ESTRUCTURAS DE PAYLOAD (opcional, para acceso tipado)
@@ -214,6 +224,8 @@ typedef struct {
 typedef struct {
     char line1[VM_DISPLAY_LINE_LEN];
     char line2[VM_DISPLAY_LINE_LEN];
+    char line3[VM_DISPLAY_LINE_LEN];
+    char line4[VM_DISPLAY_LINE_LEN];
 } vm_payload_display_t;
 
 typedef struct {
@@ -225,5 +237,9 @@ typedef struct {
     uint32_t transaction_id;
     uint8_t  result;           // vm_dispense_result_t
 } vm_payload_result_t;
+
+typedef struct {
+    uint8_t uid_ascii[VM_RFID_UID_MAX]; // UID ASCII uppercase; longitud externa (1..20)
+} vm_payload_rfid_card_t;
 
 #endif // VM_UART_PROTOCOL_H

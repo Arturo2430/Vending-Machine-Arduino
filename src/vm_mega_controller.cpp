@@ -4,6 +4,8 @@
  */
 
 #include "vm_mega_controller.h"
+#include "vm_board_config.h"
+#include <SPI.h>
 
 VmMegaController* VmMegaController::s_instance = nullptr;
 
@@ -19,7 +21,13 @@ VmMegaController::VmMegaController()
       _orderChannel(0),
       _doorSampled(false),
       _doorStable(false),
-      _doorLastChangeMs(0) {
+    _doorLastChangeMs(0),
+    _rfid(VM_PIN_RFID_SS, VM_PIN_RFID_RST),
+    _rfidAwaitingAck(false),
+    _rfidAckStartedMs(0),
+    _rfidCooldownUntilMs(0),
+    _rfidUid{0},
+    _rfidUidLen(0) {
     _record.txId = VM_TX_ID_NONE;
     _record.channel = 0;
     _record.result = VM_RESULT_REJECTED_BEFORE_MOTION;
@@ -46,6 +54,12 @@ void VmMegaController::setDispenser(const DispenserHooks& hooks) {
     _dispenser = hooks;
 }
 
+void VmMegaController::beginRfid() {
+    SPI.begin();
+    _rfid.PCD_Init();
+    _rfid.PCD_SetAntennaGain(MFRC522::RxGain_max);
+}
+
 void VmMegaController::setDisplaySink(DisplaySink sink) {
     _displaySink = sink;
 }
@@ -57,6 +71,7 @@ void VmMegaController::poll() {
 
     _link->poll();
     updateDoor();
+    pollRfid();
 
     if (_orderInProgress &&
         !_doorStable &&
@@ -114,7 +129,7 @@ void VmMegaController::handleFrame(uint8_t cmd, uint8_t seq,
                                    const uint8_t* payload, uint8_t len) {
     switch (cmd) {
         case VM_CMD_HELLO:     handleHello(seq);                    break;
-        case VM_CMD_ACK:       /* UART-REQ-005: nunca responde */   break;
+        case VM_CMD_ACK:       handleAck(payload, len);             break;
         case VM_CMD_STATUS:    handleStatus(seq, payload, len);     break;
         case VM_CMD_SET_MODE:  handleSetMode(seq, payload, len);    break;
         case VM_CMD_HEARTBEAT: handleHeartbeat(seq, payload, len);  break;
@@ -126,6 +141,17 @@ void VmMegaController::handleFrame(uint8_t cmd, uint8_t seq,
             ack(seq, cmd, VM_ACK_REJECTED, VM_REASON_INVALID_CMD);
             break;
     }
+}
+
+void VmMegaController::handleAck(const uint8_t* payload, uint8_t len) {
+    if (payload == nullptr || len != VM_LEN_ACK || !_rfidAwaitingAck) {
+        return;
+    }
+    if (payload[0] != VM_CMD_RFID_CARD) {
+        return;
+    }
+    _rfidAwaitingAck = false;
+    _rfidCooldownUntilMs = millis() + VM_RFID_RETRY_COOLDOWN_MS;
 }
 
 void VmMegaController::handleHello(uint8_t seq) {
@@ -187,7 +213,12 @@ void VmMegaController::handleDisplay(uint8_t seq, const uint8_t* payload, uint8_
     // UART-REQ-009: copia literal sin interpretar. Nota: `payload` apunta
     // al buffer transitorio del parser; el sink debe copiar al instante.
     if (_displaySink != nullptr) {
-        _displaySink((const char*)payload, (const char*)(payload + VM_DISPLAY_LINE_LEN));
+        _displaySink(
+            (const char*)payload,
+            (const char*)(payload + VM_DISPLAY_LINE_LEN),
+            (const char*)(payload + (2u * VM_DISPLAY_LINE_LEN)),
+            (const char*)(payload + (3u * VM_DISPLAY_LINE_LEN))
+        );
     }
     ack(seq, VM_CMD_DISPLAY, VM_ACK_RECEIVED, VM_REASON_NONE);
 }
@@ -263,6 +294,54 @@ void VmMegaController::handleTolerated(uint8_t seq, const uint8_t* payload,
         return;
     }
     ack(seq, cmdRef, VM_ACK_RECEIVED, VM_REASON_NONE);
+}
+
+void VmMegaController::pollRfid() {
+    if (_link == nullptr) {
+        return;
+    }
+
+    uint32_t now = millis();
+    if (_rfidAwaitingAck) {
+        if (now - _rfidAckStartedMs >= VM_RFID_ACK_TIMEOUT_MS) {
+            _rfidAwaitingAck = false;
+            _rfidCooldownUntilMs = now + VM_RFID_RETRY_COOLDOWN_MS;
+        }
+        return;
+    }
+    if ((int32_t)(now - _rfidCooldownUntilMs) < 0) {
+        return;
+    }
+    if (!_rfid.PICC_IsNewCardPresent() || !_rfid.PICC_ReadCardSerial()) {
+        return;
+    }
+
+    uint8_t rawLength = _rfid.uid.size;
+    if (rawLength == 0 || rawLength > (VM_RFID_UID_MAX / 2u)) {
+        _rfid.PICC_HaltA();
+        _rfid.PCD_StopCrypto1();
+        return;
+    }
+
+    for (uint8_t i = 0; i < rawLength; i++) {
+        uint8_t value = _rfid.uid.uidByte[i];
+        uint8_t highNibble = (uint8_t)(value >> 4);
+        uint8_t lowNibble = (uint8_t)(value & 0x0Fu);
+        _rfidUid[2u * i] = highNibble < 10u
+            ? (uint8_t)('0' + highNibble)
+            : (uint8_t)('A' + (highNibble - 10u));
+        _rfidUid[(2u * i) + 1u] = lowNibble < 10u
+            ? (uint8_t)('0' + lowNibble)
+            : (uint8_t)('A' + (lowNibble - 10u));
+    }
+    _rfidUidLen = (uint8_t)(rawLength * 2u);
+
+    _rfid.PICC_HaltA();
+    _rfid.PCD_StopCrypto1();
+
+    _link->sendRfidCard(_link->nextSeq(), _rfidUid, _rfidUidLen);
+    _rfidAwaitingAck = true;
+    _rfidAckStartedMs = now;
 }
 
 // ------------------------------------------------------------
