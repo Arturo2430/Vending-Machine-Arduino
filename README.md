@@ -1,6 +1,6 @@
 <div align="center">
 
-# Firmware Arduino Mega - Máquina Expendedora
+# Firmware Arduino Mega - Máquina Expendedora (2.1.0 monoprocesador)
 
 [![Arduino](https://img.shields.io/badge/Arduino-00979D?style=for-the-badge&logo=arduino&logoColor=white)](#)
 [![C++](https://img.shields.io/badge/C++-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)](#)
@@ -16,43 +16,78 @@
 
 ## Resumen
 
-Este repositorio contiene la parte del firmware para el microcontrolador periférico (Arduino Mega) de la máquina expendedora SAID correspondiente a **Eder Omar Zúñiga Zavala**.
+Firmware **2.1.0 monoprocesador** para la máquina expendedora SAID: toda la
+máquina de estados corre en un único **Arduino Mega**, sin ESP32, sin
+comunicación UART, sin web/WiFi y sin RFID.
 
-Su responsabilidad (PDF 1, Programación Arduino):
-- **UART v2 (extremo Mega):** implementa el contrato `SAID-ARCH-UART` v2.0.0 FINAL como nodo esclavo: HELLO, ACK, STATUS, SET_MODE, HEARTBEAT, DISPLAY, VEND y RESULT, con parser incremental no bloqueante.
-- **Idempotencia y rechazo de duplicados:** un mismo `transaction_id` nunca vuelve a girar un motor; duplicado con canal distinto se rechaza con `DUPLICATE_CONFLICT`.
-- **Puerta (D3) y barrera óptica (D2):** lectura con debounce y reporte en STATUS; la barrera obstruida detiene el inicio del giro (`REJECTED_BEFORE_MOTION`).
-- **Registro EEPROM:** conserva el último resultado físico para recuperación y reconciliación ante cortes de energía (Q20).
-- **SET_MODE:** transición VENTA/MANTENIMIENTO con protección `BUSY` y arranque obligatorio en MODE_MANTENIMIENTO (UART-REQ-003).
+El Mega implementa el negocio completo portado de `Vending-Machine-ESP32`:
+selección de producto, pago en efectivo, despacho por motores DC, cálculo de
+cambio, carrousel de promociones en LCD 20x4 y menú de administración
+(EEPROM local).
 
-El Mega **no** implementa negocio: no consulta SQLite, no autoriza pagos ni interpreta PIN (eso pertenece al ESP32).
+## Módulos
 
-### Integración con los otros subgrupos del Mega
+| Módulo | Responsabilidad |
+| :--- | :--- |
+| `src/main.cpp` | Wiring: teclado físico (`Keypad`), LCD I2C, motor, EEPROM y FSM. |
+| `vm_fsm.*` | Máquina de estados de compra y administración (S0-S17, portada del ESP32). |
+| `vm_eeprom_data.*` | Persistencia mínima en EEPROM: 4 slots, caja, PIN y última orden (Q20). |
+| `vm_motor_config.*` / `vm_motor_controller.*` | Motores DC vía **PCA9685** (Diego): `start/poll/stop`, barrera como detección de caída (SUCCESS) y timeout hacia `UNCERTAIN`. |
+| `vm_keypad.*` | Interpretación de teclas por modo (compra/efectivo/admin). |
+| `vm_display.*` | LCD **20x4 I2C** (0x27) vía `marcoschwartz/LiquidCrystal_I2C`. |
+| `vm_carousel.*` | Carrousel de subpantallas (2 s por pantalla). |
+| `vm_change_calculator.*` | Cambio greedy con monedas de la caja (denominaciones $10/$5/$2/$1). |
 
-- **Servos (Diego Ramírez):** se conectan vía `VmMegaController::setDispenser()`. Sin actuador registrado, una orden VEND se confirma y se cierra como `REJECTED_BEFORE_MOTION`.
-- **Teclado y LCD (Hugo de León):** se conectan vía `VmMegaController::setDisplaySink()` (texto DISPLAY) y `VmMegaController::sendKeyEvent()` (mensaje KEY).
+## Diagrama de flujo (FSM)
 
----
+```
+S0 Arranque -> S2 Reposo
+S2 Reposo (1-4 elige canal, A admin) -> S3 Sel canal
+S3 (A confirma / * cancela) -> S4 Sel pago
+S4 (A=Efectivo) -> S5 Efectivo
+S5 Inserta monedas (1-9, B cancela); suficiente -> S7 Reservada
+S7 Reserva stock + registra orden + valida puerta/barrera -> S8
+S8 Despachando (poll motor) -> S9 Confirmada | S10 Falla
+S9 -> S11 Cambio -> S12 Pantalla fin -> S2
+S13 PIN admin -> S14 Canal -> S15 Accion -> S16 Precio / S17 Stock
+```
+
+## Hardware (configurable en `vm_board_config.h`)
+
+- **Puerta:** D3 (INPUT_PULLUP, debounce 30 ms) — bloquea el despacho si está abierta.
+- **Barrera óptica:** D2 — el motor la usa para detectar la caída (entregado) e impedir nuevo giro si está ocupada.
+- **Teclado 4x4:** filas D22-D25, columnas D26-D29 (`Keypad` lib).
+- **LCD:** I2C 20x4, dirección `0x27`.
+- **Motores DC:** PCA9685 (I2C, 0x40), canales PWM en `vm_motor_config.h`.
+
+## Datos semilla (primer arranque de la EEPROM)
+
+| Slot | Producto | Precio | Stock | Capacidad |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | Coca-Cola 355 ml | $18.00 | 8 | 10 |
+| 2 | Galletas Marías | $15.00 | 6 | 10 |
+| 3 | Agua 600 ml | $12.00 | 9 | 10 |
+| 4 | Jugo Naranja | $14.00 | 5 | 10 |
+
+- Caja inicial: 10 piezas de $10, $5, $2 y $1.
+- PIN de administrador: `1234` (3 fallos = bloqueo 30 s).
 
 ## Estructura del Proyecto
 
-La estructura sigue la convención de **PlatformIO / C++**:
-
 | Directorio | Propósito |
 | :--- | :--- |
-| 📁 **`src/`** | Código fuente del proyecto: `main.cpp`, `vm_mega_controller.cpp` (rol esclavo, puerta, barrera y SET_MODE) y `vm_record_store.cpp` (registro EEPROM). |
-| 📚 **`lib/`** | `VmUartLink`: capa de enlace y protocolo UART compartidos (idéntica al repo ESP32). |
-| ⚙️ **`include/`** | Cabeceras del proyecto (`vm_board_config.h`, `vm_mega_controller.h`, `vm_record_store.h`). |
+| 📁 **`src/`** | Implementaciones: `main.cpp`, `vm_fsm.cpp`, `vm_eeprom_data.cpp`, `vm_motor_controller.cpp`, `vm_keypad.cpp`, `vm_display.cpp`, `vm_carousel.cpp`, `vm_change_calculator.cpp`. |
+| ⚙️ **`include/`** | Cabeceras y parámetros de placa (`vm_board_config.h`). |
 
-> `lib/VmUartLink/vm_uart_protocol.h` debe mantenerse **idéntico** al del repositorio `Vending-Machine-ESP32` (UART-REQ-001).
+Dependencias externas (`lib_deps`): `Adafruit PWM Servo Driver Library`,
+`Keypad` y `LiquidCrystal_I2C`.
 
----
+## Compilar y cargar
 
-## Subgrupo Arduino (estado actual del repo)
-
-* **Eder Omar Zúñiga Zavala:** UART v2, puerta, barrera, registro EEPROM y `SET_MODE`. *(implementado aquí)*
-* **Diego Ramírez Ibarra:** Servos, neutral, calibración y parada no bloqueante. *(pendiente, se integra por hooks)*
-* **Hugo Guillermo de Leon Ruiz:** Teclado y LCD para compra, PIN oculto y campos de reposición. *(pendiente, se integra por hooks)*
+```bash
+pio run                 # compilar
+pio run -t upload       # compilar y cargar por USB
+```
 
 ---
 
