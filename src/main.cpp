@@ -66,7 +66,9 @@ void setup() {
     Wire.begin(); // <-- INICIAR I2C ANTES DEL LCD
 
     pinMode(VM_PIN_DOOR, INPUT_PULLUP);
-    pinMode(VM_PIN_BARRIER, INPUT_PULLUP);
+    pinMode(VM_PIN_TRIG, OUTPUT);
+    digitalWrite(VM_PIN_TRIG, LOW);
+    pinMode(VM_PIN_ECHO, INPUT);
 
     display.begin();
     keypad.setDebounceTime(VM_KEYPAD_DEBOUNCE_MS);

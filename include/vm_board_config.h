@@ -14,11 +14,12 @@
 /* ============================================================
  * Sensores de seguridad (puerta y barrera)
  * ============================================================ */
-#define VM_PIN_BARRIER           2u   // Barrera óptica de caída (entrada)
+#define VM_PIN_TRIG              9u   // HC-SR04 Trigger (salida)
+#define VM_PIN_ECHO             10u   // HC-SR04 Echo (entrada)
 #define VM_PIN_DOOR              3u   // Sensor de puerta cerrada (entrada)
 
-// Nivel lógico activo de cada sensor (lo define Electrónica).
-#define VM_BARRIER_OCCUPIED_LEVEL LOW
+// Umbral en centímetros para considerar que el producto cayó a la bandeja
+#define VM_ULTRASONIC_THRESHOLD_CM 10.0f
 #define VM_DOOR_CLOSED_LEVEL      LOW
 #define VM_DOOR_DEBOUNCE_MS       30u
 
