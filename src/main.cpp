@@ -7,6 +7,7 @@
  */
 
 #include <Arduino.h>
+#include <Wire.h>
 #include <Keypad.h>
 #include "vm_board_config.h"
 #include "vm_display.h"
@@ -61,6 +62,8 @@ static Keypad keypad(makeKeymap(keypadMap),
 // ---------------------------------------------------------------------------
 void setup() {
     Serial.begin(115200);
+
+    Wire.begin(); // <-- INICIAR I2C ANTES DEL LCD
 
     pinMode(VM_PIN_DOOR, INPUT_PULLUP);
     pinMode(VM_PIN_BARRIER, INPUT_PULLUP);
