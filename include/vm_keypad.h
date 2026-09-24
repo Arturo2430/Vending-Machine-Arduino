@@ -40,7 +40,8 @@ enum class KeyAction : uint8_t {
     SELECT_ASTERISK = 14,
     SELECT_NUM    = 15,
     ENTER_ADMIN   = 16,
-    CHOOSE_CASH   = 17
+    CHOOSE_CASH   = 17,
+    CHOOSE_RFID   = 18
 };
 
 class VmKeypad {

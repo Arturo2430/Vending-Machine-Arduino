@@ -13,6 +13,7 @@
 #include "vm_keypad.h"
 #include "vm_eeprom_data.h"
 #include "vm_motor_controller.h"
+#include "vm_rfid.h"
 #include "vm_fsm.h"
 
 // ---------------------------------------------------------------------------
@@ -21,11 +22,12 @@
 static VmDisplay display;
 static VmEepromData storage;
 static VmMotorController motor;
+static VmRfid rfid;
 
 static void displayEvent(const char* l1, const char* l2,
                          const char* l3, const char* l4);
 
-static VmFsm fsm(storage, motor, displayEvent);
+static VmFsm fsm(storage, motor, rfid, displayEvent);
 
 static void displayEvent(const char* l1, const char* l2,
                          const char* l3, const char* l4) {
@@ -67,6 +69,7 @@ void setup() {
     keypad.setDebounceTime(VM_KEYPAD_DEBOUNCE_MS);
 
     motor.begin();
+    rfid.begin();
     fsm.begin();
 }
 

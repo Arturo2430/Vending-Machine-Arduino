@@ -1,7 +1,7 @@
 /**
  * @file vm_fsm.cpp
  * @brief Implementación de la máquina de estados (portada del ESP32,
- *        sin RFID ni comunicación UART).
+ *        con pago RFID MIFARE y efectivo).
  */
 
 #include <string.h>
@@ -38,9 +38,11 @@ static void formatMoney(uint32_t centavos, char* buf, size_t size) {
 // ---------------------------------------------------------------------------
 // VmFsm
 // ---------------------------------------------------------------------------
-VmFsm::VmFsm(VmEepromData& data, VmMotorController& motor, DisplayFn displayFn)
+VmFsm::VmFsm(VmEepromData& data, VmMotorController& motor, VmRfid& rfid,
+              DisplayFn displayFn)
     : _data(data),
       _motor(motor),
+      _rfid(rfid),
       _displayFn(displayFn),
       _carousel(displayFn),
       _changeCalc(),
@@ -51,6 +53,7 @@ VmFsm::VmFsm(VmEepromData& data, VmMotorController& motor, DisplayFn displayFn)
       _insertedCentavos(0u),
       _stockReserved(false),
       _pendingResult(VM_RESULT_DELIVERED),
+      _paymentMethod(0u),
       _pinLen(0),
       _pinFailCount(0u),
       _pinLockoutEnd(0u),
@@ -110,6 +113,7 @@ void VmFsm::enterState(FsmState next) {
         case FsmState::S3_SEL_CANAL:      onEnterSelCanal(_selectedSlot); break;
         case FsmState::S4_SEL_PAGO:       onEnterSelPago(); break;
         case FsmState::S5_ESP_EFECTIVO:   onEnterEspEfectivo(); break;
+        case FsmState::S6_ESP_RFID:       onEnterEspRfid(); break;
         case FsmState::S7_RESERVADA:      onEnterReservada(); break;
         case FsmState::S8_DISPENSANDO:    onEnterDispensando(); break;
         case FsmState::S9_CONFIRMADA:     onEnterConfirmada(); break;
@@ -168,7 +172,13 @@ void VmFsm::update() {
         }
         case FsmState::S9_CONFIRMADA: {
             if ((uint32_t)(millis() - _motorTimer) >= 1000u) {
-                enterState(FsmState::S11_CALC_CAMBIO);
+                if (_paymentMethod == 1u) {
+                    // RFID: pago exacto, sin cambio.
+                    memset(&_changeResult, 0, sizeof(_changeResult));
+                    enterState(FsmState::S12_PANTALLA_FIN);
+                } else {
+                    enterState(FsmState::S11_CALC_CAMBIO);
+                }
             }
             break;
         }
@@ -198,6 +208,61 @@ void VmFsm::update() {
             if (inactivityExpired()) {
                 enterState(FsmState::S2_REPOSO);
             }
+            break;
+        }
+        case FsmState::S6_ESP_RFID: {
+            if (inactivityExpired()) {
+                enterState(FsmState::S2_REPOSO);
+                break;
+            }
+            // Sondeo no bloqueante del lector RFID.
+            RfidReadResult rr = _rfid.poll();
+            if (rr == RfidReadResult::OK) {
+                uint32_t saldo = _rfid.lastBalance();
+                if (saldo >= _slotInfo.priceCentavos) {
+                    // Deducir saldo de la tarjeta.
+                    RfidWriteResult wr = _rfid.deductBalance(_slotInfo.priceCentavos);
+                    if (wr == RfidWriteResult::OK) {
+                        _paymentMethod = 1u; // RFID
+                        _insertedCentavos = _slotInfo.priceCentavos; // pagó exacto
+                        enterState(FsmState::S7_RESERVADA);
+                    } else {
+                        display("  Error escritura   ",
+                                "  en tarjeta RFID   ",
+                                "  Reintente.        ",
+                                "                    ");
+                        _motorTimer = millis();
+                        // Vuelve a reposo en 3 s (manejado por S10_FALLA_DISP).
+                        enterState(FsmState::S2_REPOSO);
+                    }
+                } else {
+                    // Saldo insuficiente.
+                    char l2[VM_DISPLAY_LINE_LEN];
+                    char l3[VM_DISPLAY_LINE_LEN];
+                    char priceBuf[16], saldoBuf[16];
+                    formatMoney(saldo, saldoBuf, sizeof(saldoBuf));
+                    formatMoney(_slotInfo.priceCentavos, priceBuf, sizeof(priceBuf));
+                    snprintf(l2, sizeof(l2), " Saldo: %-12s", saldoBuf);
+                    snprintf(l3, sizeof(l3), " Precio: %-11s", priceBuf);
+                    display("  Saldo insuficiente",
+                            l2, l3,
+                            "                    ");
+                    _motorTimer = millis();
+                    // Regresa a reposo tras 3 s (tick de S10).
+                    // Usamos un timer inline: esperamos en S6 un momento.
+                    delay(3000);
+                    enterState(FsmState::S2_REPOSO);
+                }
+            } else if (rr == RfidReadResult::AUTH_FAILED ||
+                       rr == RfidReadResult::READ_FAILED) {
+                display("  Error al leer     ",
+                        "  la tarjeta RFID   ",
+                        "  Reintente.        ",
+                        "                    ");
+                delay(2000);
+                enterState(FsmState::S2_REPOSO);
+            }
+            // NONE: no hay tarjeta, seguir esperando.
             break;
         }
         case FsmState::S13_ADMIN_AUTH: {
@@ -277,12 +342,13 @@ void VmFsm::onEnterSelCanal(uint8_t slot) {
 
 void VmFsm::onEnterSelPago() {
     display("  Metodo de pago   ",
-            "  (1) Efectivo     ",
-            "  (2) Ficha        ",
-            "  [A] Continuar");
+            "  [A] Efectivo     ",
+            "  [B] Tarjeta RFID ",
+            "  [*] Cancelar");
 }
 
 void VmFsm::onEnterEspEfectivo() {
+    _paymentMethod = 0u;
     _insertedCentavos = 0u;
     resetInactivityTimer();
     renderEfectivoScreen();
@@ -303,6 +369,23 @@ void VmFsm::renderEfectivoScreen() {
 
     display("  Inserta monedas   ",
             money,
+            l3,
+            "  [B] Cancelar");
+}
+
+void VmFsm::onEnterEspRfid() {
+    _paymentMethod = 1u;
+    _insertedCentavos = 0u;
+    resetInactivityTimer();
+
+    char priceBuf[16];
+    formatMoney(_slotInfo.priceCentavos, priceBuf, sizeof(priceBuf));
+
+    char l3[VM_DISPLAY_LINE_LEN];
+    snprintf(l3, sizeof(l3), " Precio: %-11s", priceBuf);
+
+    display("  Acerque su        ",
+            "  tarjeta al lector ",
             l3,
             "  [B] Cancelar");
 }
@@ -351,6 +434,9 @@ void VmFsm::onEnterConfirmada() {
             _slotInfo.productName,
             "  Disfruta tu       ",
             "  producto!         ");
+
+    // Si fue RFID, no hay cambio que calcular: saltar a pantalla fin.
+    // El tick de S9 espera 1 s antes de avanzar.
 }
 
 void VmFsm::onEnterFallaDisp() {
@@ -527,6 +613,14 @@ void VmFsm::handleKey(char key) {
         case FsmState::S3_SEL_CANAL:      processKeySelCanal(action); break;
         case FsmState::S4_SEL_PAGO:       processKeySelPago(action); break;
         case FsmState::S5_ESP_EFECTIVO:   processKeyEspEfectivo(action); break;
+        case FsmState::S6_ESP_RFID: {
+            // Solo B cancela la espera de RFID.
+            if (action == KeyAction::CHOOSE_RFID ||
+                action == KeyAction::CANCEL_ABORT) {
+                enterState(FsmState::S2_REPOSO);
+            }
+            break;
+        }
         case FsmState::S13_ADMIN_AUTH:    processKeyAdminAuth(action); break;
         case FsmState::S14_ADMIN_CANAL:   processKeyAdminCanal(action); break;
         case FsmState::S15_ADMIN_ACCION:  processKeyAdminAccion(action); break;
@@ -572,6 +666,19 @@ void VmFsm::processKeySelPago(KeyAction a) {
     switch (a) {
         case KeyAction::CHOOSE_CASH:   // 'A': pagar con efectivo
             enterState(FsmState::S5_ESP_EFECTIVO);
+            break;
+        case KeyAction::CHOOSE_RFID:   // 'B': pagar con tarjeta RFID
+            if (_rfid.isAvailable()) {
+                enterState(FsmState::S6_ESP_RFID);
+            } else {
+                display("  RFID no           ",
+                        "  disponible.       ",
+                        "  Use efectivo.     ",
+                        "                    ");
+                // Regresa a sel. pago tras 2 s.
+                delay(2000);
+                onEnterSelPago();
+            }
             break;
         case KeyAction::CANCEL_ABORT:  // '*': cancelar
             enterState(FsmState::S2_REPOSO);
@@ -810,6 +917,22 @@ void VmFsm::buildFinScreen(uint8_t index,
         return;
     }
 
+    if (_paymentMethod == 1u) {
+        // Pago con RFID: mostrar resumen sin cambio.
+        char priceBuf[16];
+        formatMoney(_slotInfo.priceCentavos, priceBuf, sizeof(priceBuf));
+
+        char saldoBuf[16];
+        formatMoney(_rfid.lastBalance(), saldoBuf, sizeof(saldoBuf));
+
+        snprintf(lines[0], LCD_LINE_LEN, " Cobrado con RFID   ");
+        snprintf(lines[1], LCD_LINE_LEN, " Monto: %-12s", priceBuf);
+        snprintf(lines[2], LCD_LINE_LEN, " Saldo rest: %-7s", saldoBuf);
+        snprintf(lines[3], LCD_LINE_LEN, "  Gracias!           ");
+        return;
+    }
+
+    // Pago en efectivo: desglose de cambio.
     uint32_t changeTotal = (_insertedCentavos > _slotInfo.priceCentavos)
                                ? (_insertedCentavos - _slotInfo.priceCentavos)
                                : 0u;

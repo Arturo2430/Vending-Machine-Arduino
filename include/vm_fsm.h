@@ -2,10 +2,9 @@
  * @file vm_fsm.h
  * @brief Máquina de estados de la venta y administración (portada del ESP32).
  *
- * Este módulo reemplaza la capa UART/RFID del esquema 2.0 por la lógica de
- * negocio completa corriendo en el Mega: selección de producto, pago con
- * efectivo, despacho por motores DC, cálculo de cambio y menú de
- * administración. No hay ESP32 ni web.
+ * Este módulo implementa la lógica de negocio completa corriendo en el Mega:
+ * selección de producto, pago con efectivo o tarjeta RFID (MIFARE), despacho
+ * por motores DC, cálculo de cambio y menú de administración.
  */
 
 #ifndef VM_FSM_H
@@ -19,6 +18,7 @@
 #include "vm_carousel.h"
 #include "vm_change_calculator.h"
 #include "vm_motor_controller.h"
+#include "vm_rfid.h"
 
 typedef void (*DisplayFn)(const char* line1, const char* line2,
                           const char* line3, const char* line4);
@@ -30,6 +30,7 @@ enum class FsmState : uint8_t {
     S3_SEL_CANAL      = 3,
     S4_SEL_PAGO       = 4,
     S5_ESP_EFECTIVO   = 5,
+    S6_ESP_RFID       = 6,
     S7_RESERVADA      = 7,
     S8_DISPENSANDO    = 8,
     S9_CONFIRMADA     = 9,
@@ -45,7 +46,8 @@ enum class FsmState : uint8_t {
 
 class VmFsm {
 public:
-    VmFsm(VmEepromData& data, VmMotorController& motor, DisplayFn displayFn);
+    VmFsm(VmEepromData& data, VmMotorController& motor, VmRfid& rfid,
+           DisplayFn displayFn);
     void begin();
     void update();
     void handleKey(char key);
@@ -54,6 +56,7 @@ public:
 private:
     VmEepromData&        _data;
     VmMotorController&   _motor;
+    VmRfid&              _rfid;
     DisplayFn            _displayFn;
     VmKeypad             _keypad;
     VmCarousel           _carousel;
@@ -68,6 +71,7 @@ private:
     uint32_t _insertedCentavos;
     bool     _stockReserved;
     uint8_t  _pendingResult;        // vm_dispense_result_t
+    uint8_t  _paymentMethod;        // 0=efectivo, 1=RFID
     ChangeResult _changeResult;
 
     // ---- Administración --------------------------------------------------
@@ -98,6 +102,7 @@ private:
     void onEnterSelCanal(uint8_t slot);
     void onEnterSelPago();
     void onEnterEspEfectivo();
+    void onEnterEspRfid();
     void onEnterReservada();
     void onEnterDispensando();
     void onEnterConfirmada();

@@ -35,6 +35,7 @@ KeyAction VmKeypad::interpret(char key, KeyMode mode) {
 
     if (mode == KeyMode::PAGO) {
         if (key == 'A') return KeyAction::CHOOSE_CASH;
+        if (key == 'B') return KeyAction::CHOOSE_RFID;
         if (key == '*') return KeyAction::CANCEL_ABORT;
         return KeyAction::IGNORAR;
     }

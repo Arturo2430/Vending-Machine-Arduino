@@ -1,11 +1,11 @@
 /**
  * @file vm_board_config.h
  * @brief Parámetros de capa física del Arduino Mega (versión 2.1.0
- *        monoprocesador: sin ESP32, sin web, sin WiFi, sin RFID).
+ *        monoprocesador: sin ESP32, sin web, sin WiFi).
  *
  * La máquina opera de forma autónoma en el Mega: teclado, LCD 20x4 I2C,
- * motores DC vía PCA9685, sensores de puerta (D3) y barrera (D2), y
- * persistencia EEPROM.
+ * motores DC vía PCA9685, lector RFID MFRC522 (SPI), sensores de puerta
+ * (D3) y barrera (D2), y persistencia EEPROM.
  */
 
 #ifndef VM_BOARD_CONFIG_H
@@ -65,5 +65,17 @@
  * ============================================================ */
 #define VM_SEED_ADMIN_PIN          "1234"
 #define VM_SEED_CASH_DEFAULT_QTY   10u
+
+/* ============================================================
+ * RFID MFRC522 (SPI hardware del Mega)
+ * ============================================================
+ * SS/SDA → D53   RST → D8
+ * SCK    → D52   MISO → D50   MOSI → D51 (SPI por defecto)
+ * VCC    → 3.3 V   GND → GND
+ */
+#define VM_PIN_RFID_SS            53u
+#define VM_PIN_RFID_RST            8u
+#define VM_RFID_COOLDOWN_MS     1000u   // Pausa entre lecturas sucesivas
+#define VM_RFID_UID_HEX_MAX       20u   // UID hex máximo (10 bytes * 2)
 
 #endif // VM_BOARD_CONFIG_H
