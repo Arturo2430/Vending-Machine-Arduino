@@ -77,7 +77,6 @@ void setup() {
 
     Wire.begin(); // I2C debe iniciarse antes del LCD y PCA9685
 
-    pinMode(VM_PIN_DOOR,    INPUT_PULLUP);
     pinMode(VM_PIN_BARRIER, INPUT_PULLUP);
 
     display.begin();

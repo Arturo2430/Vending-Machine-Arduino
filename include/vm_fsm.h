@@ -8,17 +8,17 @@
  * Estados (S0 → S12):
  *   S0  ARRANQUE      – Inicialización del sistema
  *   S1  FALLA_INTERNA – Falla crítica de EEPROM (sistema detenido)
- *   S2  REPOSO        – Espera de selección de producto (pantalla carrusel)
+ *   S2  REPOSO        – Espera de selección de producto (carrusel)
  *   S3  SEL_CANAL     – Confirmación del producto elegido
  *   S4  SEL_PAGO      – Selección de método de pago (efectivo / RFID)
- *   S5  ESP_EFECTIVO  – Acumulación de monedas hasta alcanzar el precio
+ *   S5  ESP_EFECTIVO  – Acumulación de monedas (teclas 1-4: $1/$2/$5/$10)
  *   S6  ESP_RFID      – Lectura y cobro en tarjeta RFID
- *   S7  RESERVADA     – Verificación de stock y condiciones físicas
+ *   S7  RESERVADA     – Verificación de stock y arranque de motor
  *   S8  DISPENSANDO   – Motor activo: espera confirmación de barrera óptica
  *   S9  CONFIRMADA    – Entrega exitosa confirmada
  *   S10 FALLA_DISP    – Error de despacho con rollback de inventario
  *   S11 CALC_CAMBIO   – Cálculo de monedas a devolver
- *   S12 PANTALLA_FIN  – Resumen de la compra y carrusel final
+ *   S12 PANTALLA_FIN  – Carrusel final (éxito + cambio por denominación)
  */
 
 #ifndef VM_FSM_H
@@ -66,8 +66,10 @@ public:
     FsmState currentState() const { return _state; }
 
     // Accesibles para los trampolines del carrusel
-    void buildReposoScreen(uint8_t index, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
-    void buildFinScreen(uint8_t index, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
+    void buildReposoScreen  (uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
+    void buildFinSuccessScreen(uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
+    void buildFinRfidScreen   (uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
+    void buildChangeScreen    (uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
 
 private:
     // ---- Dependencias inyectadas ----
@@ -89,18 +91,20 @@ private:
     SlotInfo     _slotInfo;
     uint32_t     _insertedCentavos;
     bool         _stockReserved;
-    uint8_t      _pendingResult;    // vm_dispense_result_t
-    uint8_t      _paymentMethod;    // 0 = efectivo, 1 = RFID
+    uint8_t      _pendingResult;   // vm_dispense_result_t
+    uint8_t      _paymentMethod;   // 0 = efectivo, 1 = RFID
     ChangeResult _changeResult;
+
+    // ---- Datos del carrusel de cambio ----
+    // Solo se cargan antes de entrar a S12; cada entrada es una denominación
+    // no nula, ordenada de mayor a menor.
+    uint32_t _changeDenoms[4]; // denominaciones (centavos) a mostrar
+    uint32_t _changeQtys[4];   // cantidades correspondientes
+    uint8_t  _changeSlides;    // cuántas diapositivas de cambio hay
 
     // ---- Temporizadores (ms) ----
     unsigned long _inactivityTimer;
     unsigned long _motorTimer;
-
-    // ---- Sensor de puerta (debounce) ----
-    bool          _doorSampled;
-    bool          _doorStable;
-    unsigned long _doorLastChangeMs;
 
     // ---- Transiciones de estado ----
     void enterState(FsmState next);
@@ -127,7 +131,6 @@ private:
     void processKeyEspEfectivo(KeyAction a);
 
     // ---- Utilidades ----
-    void updateDoor();
     void renderEfectivoScreen();
     void display(const char* l1, const char* l2,
                  const char* l3, const char* l4);

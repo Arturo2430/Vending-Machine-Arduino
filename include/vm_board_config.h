@@ -4,22 +4,18 @@
  *
  * La máquina opera de forma autónoma en un único Arduino Mega:
  * teclado 4x4, LCD 20x4 I2C, motores DC vía PCA9685,
- * lector RFID MFRC522 (SPI), sensor de puerta (D3),
- * barrera óptica de caída (D2) y persistencia EEPROM.
+ * lector RFID MFRC522 (SPI), barrera óptica de caída (D2)
+ * y persistencia EEPROM.
  */
 
 #ifndef VM_BOARD_CONFIG_H
 #define VM_BOARD_CONFIG_H
 
 /* ============================================================
- * Sensores de seguridad (puerta y barrera óptica)
+ * Sensor de caída del producto (barrera óptica)
  * ============================================================ */
 #define VM_PIN_BARRIER           2u   // Barrera óptica de caída (entrada)
-#define VM_PIN_DOOR              3u   // Sensor de puerta cerrada (entrada)
-
 #define VM_BARRIER_OCCUPIED_LEVEL LOW  // Nivel activo cuando hay producto
-#define VM_DOOR_CLOSED_LEVEL      LOW  // Nivel activo cuando la puerta está cerrada
-#define VM_DOOR_DEBOUNCE_MS       30u  // Filtro anti-rebote del sensor de puerta
 
 /* ============================================================
  * Teclado 4x4 (filas D22-D25, columnas D26-D29)
