@@ -30,12 +30,9 @@ private:
     uint8_t _channel;
     uint32_t _startTime;
     int _result;
-    unsigned long _ultimaMedicion;
-    uint8_t _lecturasConsecutivas;
 
     void setMotorPWM(uint8_t channel, uint16_t pwm, bool forward);
     void stopAll();
-    bool medirDistancia(float& cm);
 };
 
 #endif

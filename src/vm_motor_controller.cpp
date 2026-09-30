@@ -5,9 +5,7 @@ VmMotorController::VmMotorController()
       _state(IDLE),
       _channel(0),
       _startTime(0),
-      _result(-1),
-      _ultimaMedicion(0),
-      _lecturasConsecutivas(0) {
+      _result(-1) {
 }
 
 void VmMotorController::begin() {
@@ -22,22 +20,6 @@ void VmMotorController::begin() {
     _channel = 0;
     _startTime = 0;
     _result = -1;
-    _ultimaMedicion = 0;
-    _lecturasConsecutivas = 0;
-}
-
-bool VmMotorController::medirDistancia(float& cm) {
-    digitalWrite(VM_PIN_TRIG, LOW);
-    delayMicroseconds(2);
-    digitalWrite(VM_PIN_TRIG, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(VM_PIN_TRIG, LOW);
-    
-    unsigned long duracion = pulseIn(VM_PIN_ECHO, HIGH, 30000UL); // 30ms timeout
-    if (duracion == 0) return false;
-    
-    cm = duracion * 0.0343f / 2.0f;
-    return cm >= 2.0f && cm <= 400.0f;
 }
 
 bool VmMotorController::start(uint8_t channel) {
@@ -49,25 +31,18 @@ bool VmMotorController::start(uint8_t channel) {
         return false;
     }
 
-    // Verificar que la bandeja esté libre antes de arrancar
-    float cm = 0;
-    if (medirDistancia(cm)) {
-        if (cm <= VM_ULTRASONIC_THRESHOLD_CM) {
-            return false; // Hay algo en la bandeja
-        }
+    if (digitalRead(VM_PIN_BARRIER) == VM_BARRIER_OCCUPIED_LEVEL) {
+        return false;
     }
 
     stopAll();
 
     _channel = channel;
     _startTime = millis();
-    _ultimaMedicion = millis();
-    _lecturasConsecutivas = 0;
     _result = -1;
     _state = RUNNING;
 
-    // Enviar FULL ON
-    setMotorPWM(channel, 4096u, true);
+    setMotorPWM(channel, VM_MOTOR_START_PWM, true);
     return true;
 }
 
@@ -76,23 +51,12 @@ void VmMotorController::poll() {
         return;
     }
 
-    // Intervalo de lectura para no saturar el sensor
-    if (millis() - _ultimaMedicion >= 70) {
-        _ultimaMedicion = millis();
-        float cm = 0;
-        if (medirDistancia(cm)) {
-            if (cm <= VM_ULTRASONIC_THRESHOLD_CM) {
-                _lecturasConsecutivas++;
-                if (_lecturasConsecutivas >= 1) {
-                    stopAll();
-                    _result = 0; // VM_RESULT_DELIVERED
-                    _state = FINISHED;
-                    return;
-                }
-            } else {
-                _lecturasConsecutivas = 0;
-            }
-        }
+    if (digitalRead(VM_PIN_BARRIER) == VM_BARRIER_OCCUPIED_LEVEL) {
+        stopAll();
+
+        _result = 0; // VM_RESULT_DELIVERED
+        _state = FINISHED;
+        return;
     }
 
     if ((uint32_t)(millis() - _startTime) >= VM_MOTOR_MAX_TIME_MS) {
@@ -151,19 +115,11 @@ void VmMotorController::setMotorPWM(uint8_t channel,
     uint8_t second = VM_MOTOR_IN_B[index];
 
     if (direction) {
-        if (pwm >= 4096u) {
-            _pca.setPWM(first, 4096u, 0u); // FULL ON
-        } else {
-            _pca.setPWM(first, 0u, pwm);
-        }
-        _pca.setPWM(second, 0u, 4096u); // FULL OFF
+        _pca.setPWM(first, 0u, pwm);
+        _pca.setPWM(second, 0u, 0u);
     } else {
-        _pca.setPWM(first, 0u, 4096u); // FULL OFF
-        if (pwm >= 4096u) {
-            _pca.setPWM(second, 4096u, 0u); // FULL ON
-        } else {
-            _pca.setPWM(second, 0u, pwm);
-        }
+        _pca.setPWM(first, 0u, 0u);
+        _pca.setPWM(second, 0u, pwm);
     }
 }
 
@@ -173,8 +129,7 @@ void VmMotorController::stopAll() {
          channel++) {
         uint8_t index = channel - 1u;
 
-        // FULL OFF en ambas patas
-        _pca.setPWM(VM_MOTOR_IN_A[index], 0u, 4096u);
-        _pca.setPWM(VM_MOTOR_IN_B[index], 0u, 4096u);
+        _pca.setPWM(VM_MOTOR_IN_A[index], 0u, 0u);
+        _pca.setPWM(VM_MOTOR_IN_B[index], 0u, 0u);
     }
 }
