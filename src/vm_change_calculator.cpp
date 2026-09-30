@@ -1,6 +1,6 @@
 /**
  * @file vm_change_calculator.cpp
- * @brief Implementación del calculador de cambio (greedy, portado del ESP32).
+ * @brief Cálculo de cambio con algoritmo voraz (greedy) descendente.
  */
 
 #include <Arduino.h>

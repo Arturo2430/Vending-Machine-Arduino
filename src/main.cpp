@@ -1,9 +1,18 @@
 /**
  * @file main.cpp
- * @brief Firmware Arduino Mega 2.1.0 monoprocesador (sin ESP32).
+ * @brief Firmware de la máquina expendedora (Arduino Mega 2560).
  *
- * Wiring: teclado físico (Keypad lib) -> FSM; FSM -> motor PCA9685,
- * LCD 20x4 I2C y EEPROM. Toda la máquina de estados corre en este MCU.
+ * Arquitectura: super-loop no bloqueante.
+ *   - setup(): inicializa periféricos e inyecta dependencias en la FSM.
+ *   - loop(): sondea el teclado y llama a fsm.update() en cada ciclo.
+ *
+ * Periféricos:
+ *   Teclado 4x4  → D22-D29
+ *   LCD 20x4 I2C → SDA/SCL (I2C)
+ *   Motores DC   → PCA9685 (I2C)
+ *   RFID MFRC522 → D53/D8 (SPI)
+ *   Puerta       → D3  (INPUT_PULLUP)
+ *   Barrera óptica → D2 (INPUT_PULLUP)
  */
 
 #include <Arduino.h>
@@ -18,25 +27,26 @@
 #include "vm_fsm.h"
 
 // ---------------------------------------------------------------------------
-// Instancias globales
+// Instancias globales de los subsistemas
 // ---------------------------------------------------------------------------
-static VmDisplay display;
-static VmEepromData storage;
+static VmDisplay        display;
+static VmEepromData     storage;
 static VmMotorController motor;
-static VmRfid rfid;
+static VmRfid           rfid;
 
-static void displayEvent(const char* l1, const char* l2,
-                         const char* l3, const char* l4);
+// Prototipo de la función de display que se inyecta en la FSM
+static void onDisplay(const char* l1, const char* l2,
+                      const char* l3, const char* l4);
 
-static VmFsm fsm(storage, motor, rfid, displayEvent);
+static VmFsm fsm(storage, motor, rfid, onDisplay);
 
-static void displayEvent(const char* l1, const char* l2,
-                         const char* l3, const char* l4) {
+static void onDisplay(const char* l1, const char* l2,
+                      const char* l3, const char* l4) {
     display.show(l1, l2, l3, l4);
 }
 
 // ---------------------------------------------------------------------------
-// Teclado 4x4 (filas D22-D25, columnas D26-D29)
+// Teclado matricial 4x4
 // ---------------------------------------------------------------------------
 static char keypadMap[VM_KEYPAD_ROWS][VM_KEYPAD_COLS] = {
     { '1', '2', '3', 'A' },
@@ -60,12 +70,14 @@ static Keypad keypad(makeKeymap(keypadMap),
                      VM_KEYPAD_COLS);
 
 // ---------------------------------------------------------------------------
+// setup() y loop()
+// ---------------------------------------------------------------------------
 void setup() {
     Serial.begin(115200);
 
-    Wire.begin(); // <-- INICIAR I2C ANTES DEL LCD
+    Wire.begin(); // I2C debe iniciarse antes del LCD y PCA9685
 
-    pinMode(VM_PIN_DOOR, INPUT_PULLUP);
+    pinMode(VM_PIN_DOOR,    INPUT_PULLUP);
     pinMode(VM_PIN_BARRIER, INPUT_PULLUP);
 
     display.begin();

@@ -1,8 +1,8 @@
 /**
  * @file vm_carousel.h
- * @brief Carrousel de subpantallas del LCD 20x4 (portado del ESP32).
+ * @brief Carrusel de subpantallas del LCD 20x4.
  *
- * Presenta `buildScreen` una vez por intervalo en el LCD vía `DisplayFn`.
+ * Llama a una función de construcción cada VM_CAROUSEL_INTERVAL_MS milisegundos.
  */
 
 #ifndef VM_CAROUSEL_H

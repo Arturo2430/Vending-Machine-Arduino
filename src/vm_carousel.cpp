@@ -1,6 +1,6 @@
 /**
  * @file vm_carousel.cpp
- * @brief Implementación del carrousel (portado de vm_carousel.cpp del ESP32).
+ * @brief Implementación del carrusel de subpantallas del LCD 20x4.
  */
 
 #include <string.h>

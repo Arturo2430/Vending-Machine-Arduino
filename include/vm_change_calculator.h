@@ -1,6 +1,6 @@
 /**
  * @file vm_change_calculator.h
- * @brief Cálculo de cambio usando monedas de la caja (portado del ESP32).
+ * @brief Cálculo de cambio con denominaciones de la caja de efectivo.
  */
 
 #ifndef VM_CHANGE_CALCULATOR_H

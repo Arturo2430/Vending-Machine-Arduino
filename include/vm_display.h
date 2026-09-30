@@ -2,8 +2,7 @@
  * @file vm_display.h
  * @brief LCD 20x4 I2C para la máquina expendedora (Hugo de León).
  *
- * Sustituye al "DisplaySink" del esquema UART: expone una función
- * `displayShow` que recibe 4 líneas y las presenta en la pantalla.
+ * Expone show() que recibe 4 líneas de texto y las presenta en la pantalla LCD.
  */
 
 #ifndef VM_DISPLAY_H

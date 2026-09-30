@@ -1,0 +1,637 @@
+\documentclass[12pt,a4paper]{article}
+
+% ===========================================================================
+% Paquetes
+% ===========================================================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{geometry}
+\geometry{top=2.5cm, bottom=2.5cm, left=2.8cm, right=2.8cm}
+
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{parskip}
+\usepackage{microtype}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks = true,
+    linkcolor  = blue!60!black,
+    urlcolor   = blue!60!black,
+    pdfauthor  = {Equipo de Fundamentos de IA},
+    pdftitle   = {Análisis de la FSM de la Máquina Expendedora}
+}
+
+% TikZ para diagramas UML de actividades
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, calc}
+
+% Estilo de código C++
+\lstdefinestyle{cpp}{
+    language     = C++,
+    basicstyle   = \ttfamily\footnotesize,
+    keywordstyle = \color{blue!70!black}\bfseries,
+    commentstyle = \color{green!50!black}\itshape,
+    stringstyle  = \color{orange!80!black},
+    numbers      = left,
+    numberstyle  = \tiny\color{gray},
+    numbersep    = 8pt,
+    frame        = single,
+    breaklines   = true,
+    tabsize      = 4,
+    captionpos   = b,
+    aboveskip    = 8pt,
+    belowskip    = 4pt
+}
+
+% Colores de los estados del diagrama
+\definecolor{stateColor}{RGB}{52, 120, 190}
+\definecolor{decisionColor}{RGB}{230, 140, 30}
+\definecolor{termColor}{RGB}{60, 150, 80}
+\definecolor{failColor}{RGB}{200, 60, 60}
+
+% ===========================================================================
+% Estilos TikZ para el diagrama UML de actividades
+% ===========================================================================
+\tikzset{
+    % Nodo de inicio (círculo relleno)
+    umlstart/.style = {
+        circle, fill=black, minimum size=12pt, inner sep=0
+    },
+    % Nodo de fin (círculo con borde)
+    umlend/.style = {
+        circle, fill=white, draw=black, minimum size=14pt, inner sep=0,
+        path picture={\fill[black] circle[radius=4pt];}
+    },
+    % Estado normal
+    umlstate/.style = {
+        rectangle, rounded corners=4pt,
+        fill=stateColor!20, draw=stateColor, thick,
+        minimum width=5cm, minimum height=0.7cm,
+        text centered, font=\small\sffamily
+    },
+    % Estado de error
+    umlfail/.style = {
+        rectangle, rounded corners=4pt,
+        fill=failColor!15, draw=failColor, thick,
+        minimum width=5cm, minimum height=0.7cm,
+        text centered, font=\small\sffamily
+    },
+    % Decisión (diamante)
+    umldecision/.style = {
+        diamond, aspect=2.4,
+        fill=decisionColor!20, draw=decisionColor, thick,
+        minimum width=3.6cm, minimum height=1cm,
+        text centered, font=\small\sffamily
+    },
+    % Flecha
+    umlarrow/.style = {
+        ->, >=Stealth, thick, draw=gray!70!black
+    },
+    % Etiqueta de transición
+    umllabel/.style = {
+        font=\scriptsize\sffamily, fill=white, inner sep=2pt
+    }
+}
+
+% ===========================================================================
+\begin{document}
+% ===========================================================================
+
+% ---------------------------------------------------------------------------
+% Portada
+% ---------------------------------------------------------------------------
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    {\LARGE\bfseries Universidad Politécnica de Victoria}\\[0.5cm]
+    {\large Ingeniería en Tecnologías de la Información}\\[1.5cm]
+    \rule{\linewidth}{1.5pt}\\[0.6cm]
+    {\huge\bfseries Análisis Técnico de la\\[0.3cm]
+     Máquina de Estados Finitos (FSM)\\[0.3cm]
+     de la Máquina Expendedora}\\[0.4cm]
+    \rule{\linewidth}{1.5pt}\\[1.2cm]
+    {\large\bfseries Materia:} Fundamentos de Inteligencia Artificial\\[0.3cm]
+    {\large\bfseries Plataforma:} Arduino Mega 2560 (firmware C++, PlatformIO)\\[1.5cm]
+    {\large Arturo Zapata \quad · \quad Fabián Ramírez \quad · \quad Equipo}\\[0.5cm]
+    {\large\today}
+    \vfill
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ===========================================================================
+\section{Introducción y Contexto del Proyecto}
+% ===========================================================================
+
+La máquina expendedora es un sistema embebido autónomo implementado en un
+\textbf{Arduino Mega 2560}. Todo el firmware corre en un único microcontrolador
+sin dependencias de red, corriendo sobre un \emph{super-loop} no bloqueante.
+
+Los periféricos que gestiona el sistema son:
+\begin{itemize}
+    \item \textbf{Teclado matricial 4×4} (D22–D29) — entrada del usuario.
+    \item \textbf{LCD 20×4 I$^2$C} (0x27) — retroalimentación visual.
+    \item \textbf{Motores DC} vía PCA9685 (I$^2$C) — despacho de producto.
+    \item \textbf{Lector RFID MFRC522} (SPI: D53, D8) — pago con tarjeta.
+    \item \textbf{Sensor de puerta} (D3, pull-up) — seguridad física.
+    \item \textbf{Barrera óptica de caída} (D2, pull-up) — confirmación de entrega.
+    \item \textbf{EEPROM interna} — persistencia de inventario y caja.
+\end{itemize}
+
+El corazón del firmware es el módulo \texttt{VmFsm}, una Máquina de Estados
+Finitos (FSM) con 13~estados que encapsula toda la lógica de negocio: selección,
+cobro, despacho y cálculo de cambio.
+
+% ===========================================================================
+\section{Punto de Entrada: \texttt{main.cpp}}
+% ===========================================================================
+
+\subsection{Arquitectura de Super-Loop}
+
+El firmware sigue el patrón \emph{bare-metal super-loop}: \texttt{setup()}
+inicializa los periféricos una sola vez, y \texttt{loop()} se ejecuta
+continuamente sin usar interrupciones ni RTOS.
+
+\begin{lstlisting}[style=cpp, caption={Núcleo del super-loop en main.cpp}]
+void setup() {
+    Wire.begin();           // I2C antes del LCD y PCA9685
+    display.begin();
+    motor.begin();
+    rfid.begin();
+    fsm.begin();            // carga EEPROM y entra al estado S0
+}
+
+void loop() {
+    char key = keypad.getKey();  // sondeo no bloqueante del teclado
+    if (key != NO_KEY)
+        fsm.handleKey(key);      // despachar tecla a la FSM
+
+    fsm.update();                // avanzar la maquina de estados
+}
+\end{lstlisting}
+
+\subsection{Inyección de Dependencias}
+
+Todos los subsistemas se instancian como objetos estáticos globales y se
+\emph{inyectan} al constructor de \texttt{VmFsm}:
+
+\begin{lstlisting}[style=cpp, caption={Instanciación e inyección en main.cpp}]
+static VmDisplay         display;
+static VmEepromData      storage;
+static VmMotorController motor;
+static VmRfid            rfid;
+
+static VmFsm fsm(storage, motor, rfid, onDisplay);
+\end{lstlisting}
+
+La función \texttt{onDisplay()} actúa como \emph{callback} de presentación:
+la FSM nunca accede directamente al LCD; simplemente llama al puntero de
+función \texttt{DisplayFn} que le fue entregado en construcción.
+
+Este diseño desacopla la lógica de negocio del hardware físico y facilita
+pruebas unitarias sin hardware real.
+
+% ===========================================================================
+\section{La Máquina de Estados: \texttt{VmFsm}}
+% ===========================================================================
+
+\subsection{Concepto y Rol}
+
+\texttt{VmFsm} implementa el patrón \textbf{Mediador/Controlador}: centraliza
+la lógica de negocio y coordina a los demás módulos sin que éstos se
+conozcan entre sí.
+
+Conceptualmente es una \textbf{Máquina de Moore}: las salidas (pantallas,
+activación de motor, cálculo de cambio) dependen únicamente del estado actual,
+y las transiciones dependen de eventos (teclas, lectura RFID, expiración de
+temporizadores, señales de sensores).
+
+\subsection{Mecanismo de Transición}
+
+El flujo de control sigue un patrón de dos funciones complementarias:
+
+\begin{enumerate}
+    \item \texttt{enterState(FsmState next)} — cambia \texttt{\_state} y
+          llama al gancho \texttt{onEnter*()} correspondiente que ejecuta
+          las acciones de entrada al nuevo estado.
+    \item \texttt{update()} — llamado cada ciclo desde \texttt{loop()}.
+          Sondea temporizadores, sensores y el lector RFID para generar
+          las transiciones temporizadas y autónomas.
+\end{enumerate}
+
+Las transiciones por teclado se procesan en \texttt{handleKey()}, que
+traduce el carácter físico a una acción semántica mediante \texttt{VmKeypad}
+y la delega al procesador de teclas del estado activo.
+
+\subsection{Temporización No Bloqueante}
+
+Todos los temporizadores se implementan comparando \texttt{millis()} contra
+una referencia guardada, sin usar \texttt{delay()}:
+
+\begin{lstlisting}[style=cpp, caption={Patrón de temporizador no bloqueante}]
+// Arrancar el temporizador:
+_motorTimer = millis();
+
+// Verificar expiración (en update()):
+if ((uint32_t)(millis() - _motorTimer) >= VM_TIMEOUT_MOTOR_MS) {
+    // ... acción de timeout
+}
+\end{lstlisting}
+
+El cast a \texttt{uint32\_t} garantiza el manejo correcto del desbordamiento
+(\emph{overflow}) del contador de 32 bits cada 49 días.
+
+Los timeouts definidos son:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrp{5.5cm}}
+\toprule
+\textbf{Constante} & \textbf{Valor} & \textbf{Uso} \\
+\midrule
+\texttt{VM\_TIMEOUT\_INACTIVITY\_MS} & 180\,000 ms & Regreso a reposo por inactividad en S3–S6 \\
+\texttt{VM\_TIMEOUT\_MOTOR\_MS}      &  10\,000 ms & Tiempo máximo de giro del motor en S8 \\
+\texttt{VM\_CAROUSEL\_INTERVAL\_MS}  &   2\,000 ms & Rotación de subpantalla del carrusel \\
+\bottomrule
+\end{tabular}
+\caption{Temporizadores de la FSM}
+\end{table}
+
+\subsection{Seguridad Física: Sensor de Puerta}
+
+Antes de girar el motor se verifica que la puerta del cajón esté cerrada.
+El sensor está en D3 con nivel activo \texttt{LOW}. Para evitar falsos
+positivos por rebotes mecánicos, se implementa un filtro de debounce de 30 ms:
+
+\begin{lstlisting}[style=cpp, caption={Filtro de rebote en updateDoor()}]
+void VmFsm::updateDoor() {
+    bool level = (digitalRead(VM_PIN_DOOR) == VM_DOOR_CLOSED_LEVEL);
+    if (level != _doorSampled) {
+        _doorSampled      = level;
+        _doorLastChangeMs = millis();
+    } else if ((uint32_t)(millis() - _doorLastChangeMs) >= VM_DOOR_DEBOUNCE_MS) {
+        _doorStable = level;  // estado estable confirmado
+    }
+}
+\end{lstlisting}
+
+% ===========================================================================
+\section{Interrelación con las Demás Clases}
+% ===========================================================================
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.4cm and 2.2cm,
+    box/.style={rectangle, rounded corners=3pt, draw=stateColor, thick,
+                fill=stateColor!10, minimum width=3cm, minimum height=0.8cm,
+                text centered, font=\small\ttfamily},
+    fsmbox/.style={rectangle, rounded corners=3pt, draw=stateColor!80!black, line width=2pt,
+                   fill=stateColor!25, minimum width=3.2cm, minimum height=0.9cm,
+                   text centered, font=\small\ttfamily\bfseries},
+    arr/.style={->, >=Stealth, draw=gray!60!black, thick}
+]
+    % FSM central
+    \node[fsmbox] (fsm) {VmFsm};
+
+    % Dependencias
+    \node[box, above left=of fsm]  (eeprom)   {VmEepromData};
+    \node[box, above=of fsm]       (motor)    {VmMotorController};
+    \node[box, above right=of fsm] (rfid)     {VmRfid};
+    \node[box, left=of fsm]        (keypad)   {VmKeypad};
+    \node[box, right=of fsm]       (display)  {VmDisplay};
+    \node[box, below left=of fsm]  (carousel) {VmCarousel};
+    \node[box, below right=of fsm] (change)   {VmChangeCalculator};
+
+    % Flechas con etiquetas de responsabilidad
+    \draw[arr] (fsm) -- node[umllabel, pos=0.45] {stock/caja/orden} (eeprom);
+    \draw[arr] (fsm) -- node[umllabel, pos=0.45] {start/poll/stop} (motor);
+    \draw[arr] (fsm) -- node[umllabel, pos=0.45] {poll/deductBalance} (rfid);
+    \draw[arr] (fsm) -- node[umllabel, pos=0.45] {interpret(key)} (keypad);
+    \draw[arr] (fsm) -- node[umllabel, pos=0.45] {show(l1..l4)} (display);
+    \draw[arr] (fsm) -- node[umllabel, pos=0.45] {addScreen/update} (carousel);
+    \draw[arr] (fsm) -- node[umllabel, pos=0.45] {calculate(cambio)} (change);
+\end{tikzpicture}
+\caption{Dependencias de \texttt{VmFsm} con los subsistemas del firmware}
+\label{fig:deps}
+\end{figure}
+
+La tabla siguiente resume la responsabilidad de cada módulo:
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Clase} & \textbf{Responsabilidad} \\
+\midrule
+\texttt{VmEepromData}      & Persistencia de slots (nombre, precio, stock), caja de efectivo y registro transaccional ante cortes de energía. \\
+\texttt{VmMotorController} & Controla motores DC vía PCA9685; sondea la barrera óptica (D2) para confirmar la entrega. \\
+\texttt{VmRfid}            & Lectura de tarjetas MIFARE y escritura del nuevo saldo tras el cobro. \\
+\texttt{VmKeypad}          & Interpreta caracteres físicos del teclado 4×4 en acciones semánticas (\texttt{KeyAction}) según el contexto (\texttt{KeyMode}). \\
+\texttt{VmDisplay}         & Abstracción del LCD 20×4 I$^2$C; recibe 4 cadenas de texto. \\
+\texttt{VmCarousel}        & Rota subpantallas cada 2\,s llamando al callback de display. \\
+\texttt{VmChangeCalculator}& Algoritmo voraz de cálculo de cambio sobre las monedas de la caja. \\
+\bottomrule
+\end{tabular}
+\caption{Módulos del firmware y sus responsabilidades}
+\end{table}
+
+% ===========================================================================
+\section{Cálculo de Cambio: \texttt{VmChangeCalculator}}
+% ===========================================================================
+
+\subsection{Algoritmo Greedy Decreciente}
+
+El cambio se calcula con un \textbf{algoritmo voraz} (\emph{greedy}): se
+intentan primero las monedas de mayor denominación, reduciendo el monto
+restante hasta completarlo o agotar las existencias.
+
+Las denominaciones utilizadas (en centavos de peso mexicano) son:
+
+\begin{center}
+\$10.00 (1000¢) \quad \$5.00 (500¢) \quad \$2.00 (200¢) \quad \$1.00 (100¢)
+\end{center}
+
+\begin{lstlisting}[style=cpp, caption={Núcleo del algoritmo greedy en VmChangeCalculator::calculate()}]
+const uint32_t denominaciones[4] = { 1000u, 500u, 200u, 100u };
+
+for (uint8_t i = 0; i < 4 && total > 0u; i++) {
+    uint32_t disponible = 0;
+    cashBox.getCoinStock(denominaciones[i], disponible);
+
+    uint32_t usar = 0;
+    while (usar < disponible && total >= denominaciones[i]) {
+        total -= denominaciones[i];
+        usar++;
+    }
+
+    if (usar > 0u) {
+        cashBox.deductCoins(denominaciones[i], usar);
+        *contadores[i] = usar;
+    }
+}
+
+if (total > 0u) return false;  // cambio no realizable
+\end{lstlisting}
+
+\subsection{Decisiones de Diseño}
+
+\begin{itemize}
+    \item \textbf{Aritmética entera en centavos}: los precios y montos se
+          almacenan como \texttt{uint32\_t} en centavos para evitar errores
+          de punto flotante en el AVR de 8~bits.
+    \item \textbf{Consulta antes del descuento}: se consulta
+          \texttt{getCoinStock()} antes de descontar, garantizando que nunca
+          se descuente más de lo disponible.
+    \item \textbf{Integración con EEPROM}: cada \texttt{deductCoins()} persiste
+          inmediatamente en EEPROM, de modo que ante un corte de energía la
+          caja refleja el estado real.
+    \item \textbf{Retorno \texttt{false} si no hay fondos}: la FSM muestra un
+          mensaje informativo y regresa a reposo tras 5~s sin intentar ningún
+          pago forzado.
+\end{itemize}
+
+\subsection{Invocación desde la FSM}
+
+El cálculo se inicia en el estado \textbf{S11\_CALC\_CAMBIO} solo si el pago
+fue en efectivo y si $\text{insertado} > \text{precio}$:
+
+\begin{lstlisting}[style=cpp, caption={Llamada al calculador en onEnterCalcCambio()}]
+void VmFsm::onEnterCalcCambio() {
+    uint32_t cambio = _insertedCentavos - _slotInfo.priceCentavos;
+    if (cambio == 0u) {
+        enterState(FsmState::S12_PANTALLA_FIN); return;
+    }
+    bool ok = _changeCalc.calculate(_insertedCentavos,
+                                    _slotInfo.priceCentavos,
+                                    _data, _changeResult);
+    if (!ok) { /* mostrar error y esperar 5 s */ return; }
+    enterState(FsmState::S12_PANTALLA_FIN);
+}
+\end{lstlisting}
+
+% ===========================================================================
+\section{Los 13 Estados de la FSM}
+% ===========================================================================
+
+\subsection{Tabla Resumen}
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{clp{4.5cm}p{4cm}}
+\toprule
+\textbf{ID} & \textbf{Nombre} & \textbf{Propósito} & \textbf{Transiciones de salida} \\
+\midrule
+$S_0$  & \texttt{S0\_ARRANQUE}      & Inicialización, muestra mensaje de inicio. & → $S_2$ inmediatamente. \\
+$S_1$  & \texttt{S1\_FALLA\_INTERNA}& Error crítico de EEPROM; sistema detenido. & Estado terminal. \\
+$S_2$  & \texttt{S2\_REPOSO}        & Carrusel del catálogo, espera selección.   & → $S_3$ (tecla 1–4). \\
+$S_3$  & \texttt{S3\_SEL\_CANAL}    & Confirmar producto elegido.                & → $S_4$ (A) / $S_2$ (*) / timeout 180 s. \\
+$S_4$  & \texttt{S4\_SEL\_PAGO}     & Elegir método: efectivo o RFID.            & → $S_5$ (A) / $S_6$ (B) / $S_2$ (*). \\
+$S_5$  & \texttt{S5\_ESP\_EFECTIVO} & Acumular monedas hasta cubrir el precio.   & → $S_7$ (monto ≥ precio) / $S_2$ (B) / timeout. \\
+$S_6$  & \texttt{S6\_ESP\_RFID}     & Sondear RFID y cobrar saldo de tarjeta.    & → $S_7$ (OK) / $S_2$ (error/timeout/B). \\
+$S_7$  & \texttt{S7\_RESERVADA}     & Verificar stock y arrancar motor.          & → $S_8$ (OK) / $S_{10}$ (precondición fallida) / $S_2$ (sin stock, 1.5 s). \\
+$S_8$  & \texttt{S8\_DISPENSANDO}   & Motor activo; esperar barrera óptica.      & → $S_9$ (barrera OK) / $S_{10}$ (timeout 10 s). \\
+$S_9$  & \texttt{S9\_CONFIRMADA}    & Entrega exitosa; esperar 1 s.              & → $S_{11}$ (efectivo) / $S_{12}$ (RFID). \\
+$S_{10}$& \texttt{S10\_FALLA\_DISP} & Rollback de inventario; mensaje error 3 s. & → $S_2$. \\
+$S_{11}$& \texttt{S11\_CALC\_CAMBIO}& Calcular y deducir monedas de cambio.      & → $S_{12}$ (éxito) / $S_2$ (sin fondos, 5 s). \\
+$S_{12}$& \texttt{S12\_PANTALLA\_FIN}& Carrusel final con resumen y cambio.      & → $S_2$ (tras 2 ciclos de carrusel). \\
+\bottomrule
+\end{tabular}
+\caption{Los 13 estados de la FSM de la máquina expendedora}
+\end{table}
+
+\subsection{Descripción Detallada de Cada Estado}
+
+\paragraph{$S_0$ — Arranque.}
+Se muestra un mensaje de bienvenida mientras \texttt{begin()} carga la EEPROM.
+Si los datos son válidos, la transición a $S_2$ ocurre en el primer ciclo de
+\texttt{update()}.
+
+\paragraph{$S_1$ — Falla Interna.}
+Estado terminal alcanzado si \texttt{VmEepromData::begin()} devuelve
+\texttt{false}. El sistema muestra un error permanente y no acepta ninguna
+entrada. Requiere reinicio físico.
+
+\paragraph{$S_2$ — Reposo.}
+Estado de espera de largo plazo. El carrusel rota mostrando dos productos
+por subpantalla cada 2~s. Es el destino de retorno de todos los flujos de
+error, cancelación y éxito.
+
+\paragraph{$S_3$ — Selección de Canal.}
+Se consulta \texttt{VmEepromData::getSlot()} para verificar que el slot
+está habilitado. Si no, regresa a $S_2$ inmediatamente. Muestra nombre
+del producto y precio. La tecla \texttt{A} confirma.
+
+\paragraph{$S_4$ — Selección de Pago.}
+El usuario elige la pasarela de cobro. Si selecciona RFID pero el lector no
+está disponible (\texttt{rfid.isAvailable()} devuelve \texttt{false}),
+se muestra aviso y se permanece en la pantalla de selección.
+
+\paragraph{$S_5$ — Espera de Efectivo.}
+Las teclas 1–9 representan monedas de \$1 a \$500. Cada pulsación llama a
+\texttt{addCoins()} en EEPROM y actualiza el acumulado \texttt{\_insertedCentavos}.
+Cuando el acumulado cubre el precio, se transita automáticamente a $S_7$.
+
+\paragraph{$S_6$ — Espera de RFID.}
+\texttt{VmRfid::poll()} se llama en cada ciclo sin bloquear. Si la lectura
+es exitosa, se verifica el saldo. Si es suficiente, se llama a
+\texttt{deductBalance()} y se transita a $S_7$. Si el saldo es insuficiente
+o hay error de lectura, se muestra un mensaje y se regresa a $S_2$.
+
+\paragraph{$S_7$ — Reservada.}
+Punto de no retorno transaccional. Se ejecuta en orden:
+(1) \texttt{reserveStock()} — decrementa inventario;
+(2) \texttt{beginOrder()} — persiste en EEPROM que hay una orden en curso;
+(3) Se verifica \texttt{\_doorStable} (puerta cerrada);
+(4) \texttt{motor.start()} — verifica que la barrera esté libre y enciende el motor.
+Si cualquier condición falla, se transita a $S_{10}$.
+
+\paragraph{$S_8$ — Dispensando.}
+En cada ciclo de \texttt{update()}, se consulta \texttt{motor.isBusy()}.
+Cuando la barrera óptica detecta la caída del producto,
+\texttt{VmMotorController} detiene el motor y pone el resultado en
+\texttt{consumeResult()}. Un timeout de 10~s protege contra atascos.
+
+\paragraph{$S_9$ — Confirmada.}
+Se llama a \texttt{completeOrder()} para cerrar el registro transaccional
+en EEPROM. La pantalla de éxito se muestra 1~s antes de avanzar a $S_{11}$
+(efectivo) o $S_{12}$ (RFID, sin cambio).
+
+\paragraph{$S_{10}$ — Falla de Despacho.}
+Si \texttt{\_stockReserved} es \texttt{true}, se deshace la operación:
+\texttt{completeOrder()} con el resultado de falla y \texttt{releaseStock()}
+devuelven el inventario. El mensaje de error dura 3~s y retorna a $S_2$.
+
+\paragraph{$S_{11}$ — Cálculo de Cambio.}
+Invoca \texttt{VmChangeCalculator::calculate()} que aplica el algoritmo
+greedy y descuenta las monedas usadas de la EEPROM. Si no hay fondos
+suficientes, se muestra aviso y se espera 5~s antes de volver a $S_2$.
+
+\paragraph{$S_{12}$ — Pantalla Final.}
+El carrusel muestra dos subpantallas: la primera confirma la compra, la segunda
+detalla las monedas de cambio (o el cobro RFID). Tras dos intervalos de 2~s
+más 1~s de margen, retorna a $S_2$.
+
+% ===========================================================================
+\section{Diagrama UML de Actividades}
+% ===========================================================================
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.55cm and 2.4cm,
+    every node/.style={align=center}
+]
+% ============ Columna principal ============
+\node[umlstart]                         (inicio) {};
+\node[umlstate, below=0.5cm of inicio]  (s0) {$S_0$: Arranque};
+\node[umlstate, below=of s0]            (s2) {$S_2$: Reposo\\(carrusel)};
+\node[umlstate, below=of s2]            (s3) {$S_3$: Sel. Canal\\(ver producto)};
+\node[umldecision, below=of s3]         (dCanal) {Slot\\habilitado?};
+\node[umlstate, below=of dCanal]        (s4) {$S_4$: Sel. Pago};
+\node[umldecision, below=of s4]         (dPago) {Método?};
+
+% Rama Efectivo (izquierda)
+\node[umlstate, below left=1cm and 1.2cm of dPago]  (s5) {$S_5$: Esp. Efectivo\\(acumular monedas)};
+% Rama RFID (derecha)
+\node[umlstate, below right=1cm and 1.2cm of dPago] (s6) {$S_6$: Esp. RFID\\(sondeo tarjeta)};
+
+% Punto de unión después del pago
+\coordinate (joinPago) at ($(s5.south)!0.5!(s6.south) + (0,-0.8)$);
+
+\node[umlstate, below=2.5cm of dPago]  (s7) {$S_7$: Reservada\\(stock + puerta + motor)};
+\node[umldecision, below=of s7]        (dDisp) {Motor\\OK?};
+\node[umlstate, below=of dDisp]        (s8) {$S_8$: Dispensando\\(esperar barrera)};
+\node[umldecision, below=of s8]        (dBarr) {Barrera\\detectada?};
+\node[umlstate, below=of dBarr]        (s9) {$S_9$: Confirmada\\(orden completa)};
+\node[umldecision, below=of s9]        (dMetodo) {Pago\\RFID?};
+\node[umlstate, below left=0.9cm and 1.2cm of dMetodo]  (s11) {$S_{11}$: Calc. Cambio\\(greedy)};
+\node[umlstate, below right=0.9cm and 1.2cm of dMetodo] (s12r) {$S_{12}$: Pantalla Fin\\(RFID, sin cambio)};
+\node[umlstate, below=2.5cm of dMetodo] (s12) {$S_{12}$: Pantalla Fin\\(efectivo + cambio)};
+\node[umlend, below=0.7cm of s12]      (fin) {};
+
+% Nodo de falla (a la derecha)
+\node[umlfail, right=3.5cm of s8]      (s10) {$S_{10}$: Falla Disp.\\(rollback 3 s)};
+
+% ============ Flechas principales ============
+\draw[umlarrow] (inicio) -- (s0);
+\draw[umlarrow] (s0)     -- node[umllabel, right] {datos OK} (s2);
+\draw[umlarrow] (s2)     -- node[umllabel, right] {tecla 1–4} (s3);
+\draw[umlarrow] (s3)     -- (dCanal);
+\draw[umlarrow] (dCanal) -- node[umllabel, right] {Sí / [A]} (s4);
+\draw[umlarrow] (dCanal.west) -- ++(-1.2,0) |- node[umllabel, left, near start] {No} (s2.west);
+\draw[umlarrow] (s4)     -- (dPago);
+
+% Rama efectivo
+\draw[umlarrow] (dPago.west) -- ++(-0.4,0) |- node[umllabel, left, near start] {[A] Efectivo} (s5.north);
+% Rama RFID
+\draw[umlarrow] (dPago.east) -- ++(0.4,0) |- node[umllabel, right, near start] {[B] RFID} (s6.north);
+
+% Unión en s7
+\draw[umlarrow] (s5.south) |- (joinPago) -- (s7.north);
+\draw[umlarrow] (s6.south) |- (joinPago);
+
+\draw[umlarrow] (s7)     -- (dDisp);
+\draw[umlarrow] (dDisp)  -- node[umllabel, right] {Sí} (s8);
+\draw[umlarrow] (dDisp.east) -- ++(0.3,0) |- node[umllabel, right, near start] {No (puerta/motor)} (s10.north);
+\draw[umlarrow] (s8)     -- (dBarr);
+\draw[umlarrow] (dBarr)  -- node[umllabel, right] {Sí} (s9);
+\draw[umlarrow] (dBarr.east) -- ++(0.3,0) |- node[umllabel, right, near start] {No (timeout 10 s)} (s10.south);
+\draw[umlarrow] (s10.west) -- ++(-0.8,0) |- node[umllabel, left, near end] {→ $S_2$} (s2.east);
+
+\draw[umlarrow] (s9)     -- (dMetodo);
+\draw[umlarrow] (dMetodo.west) -- ++(-0.4,0) |- node[umllabel, left, near start] {No (efectivo)} (s11.north);
+\draw[umlarrow] (dMetodo.east) -- ++(0.4,0) |- node[umllabel, right, near start] {Sí (RFID)} (s12r.north);
+
+\draw[umlarrow] (s11.south)  |- ($(s12.north) + (0,0.15)$) -- (s12.north);
+\draw[umlarrow] (s12r.south) |- ($(s12.north) + (0,0.15)$);
+
+\draw[umlarrow] (s12) -- (fin);
+\draw[umlarrow] (s12.west) -- ++(-3.9,0) |- node[umllabel, left, near end] {→ $S_2$} (s2.west);
+
+% Cancelaciones (flechas a s2 desde s3, s4, s5, s6)
+\draw[umlarrow] (s3.west)  -- ++(-1.5,0) |- node[umllabel, left, near start] {[*] Cancelar} (s2.west);
+\draw[umlarrow] (s5.west)  -- ++(-0.7,0) |- node[umllabel, left, near start] {[B]/timeout} (s2.west);
+\draw[umlarrow] (s6.east)  -- ++(0.7,0)  |- node[umllabel, right, near start] {[B]/error} (s2.east);
+
+\end{tikzpicture}
+\caption{Diagrama UML de actividades de la FSM de la máquina expendedora}
+\label{fig:uml}
+\end{figure}
+
+% ===========================================================================
+\section{Conclusiones}
+% ===========================================================================
+
+El diseño de la FSM cumple los objetivos de un sistema embebido robusto:
+
+\begin{enumerate}
+    \item \textbf{Legibilidad lineal}: los 13 estados están numerados
+          secuencialmente $S_0$–$S_{12}$ y el código fuente sigue el mismo
+          orden de arriba a abajo, facilitando la lectura y el mantenimiento.
+    \item \textbf{Sin sobreingeniería}: cada clase tiene una responsabilidad
+          única y bien delimitada. La FSM no accede directamente al hardware;
+          toda comunicación es a través de las interfaces de los subsistemas.
+    \item \textbf{Robustez ante cortes de energía}: el estado transaccional
+          de cada orden se persiste en EEPROM en $S_7$ (\texttt{beginOrder})
+          y se cierra en $S_9$/$S_{10}$ (\texttt{completeOrder}), garantizando
+          consistencia aunque la alimentación se corte durante el despacho.
+    \item \textbf{Temporización no bloqueante}: todos los delays del sistema
+          se implementan con \texttt{millis()}, permitiendo que el super-loop
+          permanezca siempre receptivo a eventos externos.
+    \item \textbf{Trazabilidad de fallos}: el estado $S_{10}$ y la variable
+          \texttt{\_pendingResult} permiten distinguir tres causas de falla
+          de despacho y presentar mensajes diferenciados al usuario.
+\end{enumerate}
+
+\end{document}
