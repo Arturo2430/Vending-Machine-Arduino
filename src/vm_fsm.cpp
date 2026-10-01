@@ -1,27 +1,8 @@
-/**
- * @file vm_fsm.cpp
- * @brief Implementación de la máquina de estados de la máquina expendedora.
- *
- * Organización del archivo (lectura lineal de arriba a abajo):
- *   1. Trampolines estáticos del carrusel y utilidad formatMoney
- *   2. Constructor y begin()
- *   3. update()  – ciclo periódico de la FSM (S0 → S12)
- *   4. enterState() – dispatcher de funciones de entrada
- *   5. onEnter*() – acciones al entrar a cada estado (S0 → S12)
- *   6. handleKey() y processKey*() – manejo de teclado por estado
- *   7. Constructores de pantallas del carrusel
- */
-
 #include <string.h>
 #include "vm_fsm.h"
 #include "vm_change_calculator.h"
 
-// ===========================================================================
-// 1. Trampolines del carrusel y utilidades
-// ===========================================================================
-
-// El carrusel requiere funciones libres; usamos un puntero estático al FSM
-// activo para delegar la construcción de pantallas.
+// Puntero estatico para delegar callbacks del carrusel a la instancia FSM
 static VmFsm* s_fsm = NULL;
 
 static void reposoScreenTrampoline(uint8_t idx,
@@ -44,16 +25,11 @@ static void changeScreenTrampoline(uint8_t idx,
     if (s_fsm) s_fsm->buildChangeScreen(idx, lines);
 }
 
-// Formatea centavos como "$X.XX" en el buffer dado.
 static void formatMoney(uint32_t centavos, char* buf, size_t size) {
     uint32_t pesos = centavos / 100u;
     uint32_t cents = centavos % 100u;
     snprintf(buf, size, "$%lu.%02lu", (unsigned long)pesos, (unsigned long)cents);
 }
-
-// ===========================================================================
-// 2. Constructor y begin()
-// ===========================================================================
 
 VmFsm::VmFsm(VmEepromData& data, VmMotorController& motor, VmRfid& rfid,
               DisplayFn displayFn)
@@ -81,15 +57,12 @@ VmFsm::VmFsm(VmEepromData& data, VmMotorController& motor, VmRfid& rfid,
 }
 
 void VmFsm::begin() {
-    bool dataOk = _data.begin();
-
-    if (!dataOk) {
+    if (!_data.begin()) {
         enterState(FsmState::S1_FALLA_INTERNA);
         return;
     }
 
     pinMode(VM_PIN_BARRIER, INPUT_PULLUP);
-
     enterState(FsmState::S0_ARRANQUE);
 }
 
@@ -98,33 +71,23 @@ void VmFsm::display(const char* l1, const char* l2,
     if (_displayFn) _displayFn(l1, l2, l3, l4);
 }
 
-// ===========================================================================
-// 3. update() – ciclo periódico (llamado desde loop())
-// ===========================================================================
-
 void VmFsm::update() {
     _motor.poll();
     _carousel.update();
 
     switch (_state) {
-
-        // S0: mostrar arranque y pasar de inmediato a reposo
-        case FsmState::S0_ARRANQUE: {
+        case FsmState::S0_ARRANQUE:
             enterState(FsmState::S2_REPOSO);
             break;
-        }
 
-        // S3-S5: timeout de inactividad → regresa a reposo
         case FsmState::S3_SEL_CANAL:
         case FsmState::S4_SEL_PAGO:
-        case FsmState::S5_ESP_EFECTIVO: {
+        case FsmState::S5_ESP_EFECTIVO:
             if (inactivityExpired()) {
                 enterState(FsmState::S2_REPOSO);
             }
             break;
-        }
 
-        // S6: sondeo no bloqueante de RFID + timeout de inactividad
         case FsmState::S6_ESP_RFID: {
             if (inactivityExpired()) {
                 enterState(FsmState::S2_REPOSO);
@@ -132,7 +95,6 @@ void VmFsm::update() {
             }
 
             RfidReadResult rr = _rfid.poll();
-
             if (rr == RfidReadResult::OK) {
                 uint32_t saldo = _rfid.lastBalance();
 
@@ -151,7 +113,6 @@ void VmFsm::update() {
                         enterState(FsmState::S2_REPOSO);
                     }
                 } else {
-                    // Saldo insuficiente
                     char l2[VM_DISPLAY_LINE_LEN], l3[VM_DISPLAY_LINE_LEN];
                     char priceBuf[16], saldoBuf[16];
                     formatMoney(saldo,                  saldoBuf, sizeof(saldoBuf));
@@ -171,21 +132,16 @@ void VmFsm::update() {
                 delay(2000);
                 enterState(FsmState::S2_REPOSO);
             }
-            // RfidReadResult::NONE: sin tarjeta, seguir esperando
             break;
         }
 
-        // S7: sin stock → regresa a reposo tras 1.5 s
-        case FsmState::S7_RESERVADA: {
-            if (!_stockReserved &&
-                (uint32_t)(millis() - _motorTimer) >= 1500u) {
+        case FsmState::S7_RESERVADA:
+            if (!_stockReserved && (uint32_t)(millis() - _motorTimer) >= 1500u) {
                 enterState(FsmState::S2_REPOSO);
             }
             break;
-        }
 
-        // S8: supervisar motor → confirmada o falla
-        case FsmState::S8_DISPENSANDO: {
+        case FsmState::S8_DISPENSANDO:
             if (_motor.isBusy()) {
                 if (motorTimerExpired()) {
                     _motor.stop();
@@ -202,10 +158,8 @@ void VmFsm::update() {
                 }
             }
             break;
-        }
 
-        // S9: tras 1 s → calcular cambio o pantalla fin
-        case FsmState::S9_CONFIRMADA: {
+        case FsmState::S9_CONFIRMADA:
             if ((uint32_t)(millis() - _motorTimer) >= 1000u) {
                 if (_paymentMethod == 1u) {
                     memset(&_changeResult, 0, sizeof(_changeResult));
@@ -215,27 +169,21 @@ void VmFsm::update() {
                 }
             }
             break;
-        }
 
-        // S10: tras 3 s de error → regresa a reposo
-        case FsmState::S10_FALLA_DISP: {
+        case FsmState::S10_FALLA_DISP:
             if ((uint32_t)(millis() - _motorTimer) >= 3000u) {
                 enterState(FsmState::S2_REPOSO);
             }
             break;
-        }
 
-        // S11: tras 5 s de mensaje de sin cambio → regresa a reposo
-        case FsmState::S11_CALC_CAMBIO: {
+        case FsmState::S11_CALC_CAMBIO:
             if ((uint32_t)(millis() - _motorTimer) >= 5000u) {
                 enterState(FsmState::S2_REPOSO);
             }
             break;
-        }
 
-        // S12: tras completar el carrusel + 1 s → regresa a reposo
         case FsmState::S12_PANTALLA_FIN: {
-            uint8_t numSlides = 1u + _changeSlides; // éxito + cambio (o RFID)
+            uint8_t numSlides = 1u + _changeSlides;
             unsigned long totalMs = (unsigned long)numSlides * VM_CAROUSEL_INTERVAL_MS + 1000UL;
             if ((uint32_t)(millis() - _inactivityTimer) >= totalMs) {
                 enterState(FsmState::S2_REPOSO);
@@ -247,10 +195,6 @@ void VmFsm::update() {
             break;
     }
 }
-
-// ===========================================================================
-// 4. enterState() – dispatcher
-// ===========================================================================
 
 void VmFsm::enterState(FsmState next) {
     _state = next;
@@ -273,11 +217,6 @@ void VmFsm::enterState(FsmState next) {
     }
 }
 
-// ===========================================================================
-// 5. onEnter*() – acciones al entrar a cada estado (S0 → S12)
-// ===========================================================================
-
-// S0 – Arranque: mensaje de bienvenida
 void VmFsm::onEnterArranque() {
     display("   Iniciando...    ",
             "   Maquina         ",
@@ -285,7 +224,6 @@ void VmFsm::onEnterArranque() {
             "                   ");
 }
 
-// S1 – Falla interna: error crítico de EEPROM, sistema detenido
 void VmFsm::onEnterFallaInterna() {
     display("  ERROR INTERNO    ",
             "  EEPROM no disp.  ",
@@ -293,16 +231,14 @@ void VmFsm::onEnterFallaInterna() {
             "  al tecnico.      ");
 }
 
-// S2 – Reposo: carrusel del catálogo (dos slides: productos 1-2 y 3-4)
 void VmFsm::onEnterReposo() {
     _carousel.clearScreens();
-    _carousel.addScreen(reposoScreenTrampoline); // idx=0: slots 1 y 2
-    _carousel.addScreen(reposoScreenTrampoline); // idx=1: slots 3 y 4
+    _carousel.addScreen(reposoScreenTrampoline); // slots 1 y 2
+    _carousel.addScreen(reposoScreenTrampoline); // slots 3 y 4
     _carousel.begin();
     resetInactivityTimer();
 }
 
-// S3 – Selección de canal: confirmar producto elegido
 void VmFsm::onEnterSelCanal(uint8_t slot) {
     _selectedSlot = slot;
 
@@ -325,7 +261,6 @@ void VmFsm::onEnterSelCanal(uint8_t slot) {
     resetInactivityTimer();
 }
 
-// S4 – Selección de pago: elegir entre efectivo o RFID
 void VmFsm::onEnterSelPago() {
     display("  Metodo de pago   ",
             "  [A] Efectivo     ",
@@ -334,7 +269,6 @@ void VmFsm::onEnterSelPago() {
     resetInactivityTimer();
 }
 
-// S5 – Espera de efectivo: acumular monedas con teclas 1-4
 void VmFsm::onEnterEspEfectivo() {
     _paymentMethod    = 0u;
     _insertedCentavos = 0u;
@@ -342,7 +276,6 @@ void VmFsm::onEnterEspEfectivo() {
     renderEfectivoScreen();
 }
 
-// S6 – Espera de RFID: acercar tarjeta al lector
 void VmFsm::onEnterEspRfid() {
     _paymentMethod    = 1u;
     _insertedCentavos = 0u;
@@ -360,7 +293,6 @@ void VmFsm::onEnterEspRfid() {
             "  [B] Cancelar     ");
 }
 
-// S7 – Reservada: reservar stock y arrancar el motor
 void VmFsm::onEnterReservada() {
     resetInactivityTimer();
     _stockReserved = false;
@@ -370,7 +302,7 @@ void VmFsm::onEnterReservada() {
                 "  Seleccione otro   ",
                 "  canal.            ",
                 "                    ");
-        _motorTimer = millis(); // regresa a reposo en 1.5 s (ver update)
+        _motorTimer = millis(); // 1.5s antes de volver a reposo
         return;
     }
 
@@ -385,7 +317,6 @@ void VmFsm::onEnterReservada() {
     enterState(FsmState::S8_DISPENSANDO);
 }
 
-// S8 – Dispensando: motor girando, esperando señal de barrera óptica
 void VmFsm::onEnterDispensando() {
     _motorTimer = millis();
     display("  Despachando...    ",
@@ -394,7 +325,6 @@ void VmFsm::onEnterDispensando() {
             "                    ");
 }
 
-// S9 – Confirmada: producto entregado exitosamente
 void VmFsm::onEnterConfirmada() {
     _stockReserved = false;
     _motorTimer    = millis();
@@ -403,10 +333,8 @@ void VmFsm::onEnterConfirmada() {
             _slotInfo.productName,
             "  Disfruta tu       ",
             "  producto!         ");
-    // update() espera 1 s y avanza a S11 (efectivo) o S12 (RFID)
 }
 
-// S10 – Falla de despacho: rollback de inventario y mensaje de error
 void VmFsm::onEnterFallaDisp() {
     if (_stockReserved) {
         _stockReserved = false;
@@ -437,7 +365,6 @@ void VmFsm::onEnterFallaDisp() {
     }
 }
 
-// S11 – Cálculo de cambio: algoritmo greedy sobre caja de monedas
 void VmFsm::onEnterCalcCambio() {
     _motorTimer = millis();
 
@@ -460,26 +387,22 @@ void VmFsm::onEnterCalcCambio() {
                 "  disponible.       ",
                 "  Avisa al tecnico. ",
                 "                    ");
-        return; // update() esperará 5 s y regresará a reposo
+        return;
     }
 
     enterState(FsmState::S12_PANTALLA_FIN);
 }
 
-// S12 – Pantalla final: carrusel con éxito y slides de cambio por denominación
 void VmFsm::onEnterPantallaFin() {
     _carousel.clearScreens();
     _changeSlides = 0;
 
-    // Slide 0 (siempre): mensaje de compra exitosa
     _carousel.addScreen(finSuccessTrampoline);
 
     if (_paymentMethod == 1u) {
-        // Pago RFID: un slide extra con resumen del cobro
         _carousel.addScreen(finRfidTrampoline);
-        _changeSlides = 1; // para el cálculo del timeout en update()
+        _changeSlides = 1;
     } else {
-        // Pago efectivo: un slide por cada denominación no nula (mayor → menor)
         const uint32_t denoms[4] = {1000u, 500u, 200u, 100u};
         const uint32_t qtys[4]   = {
             _changeResult.coin1000,
@@ -502,10 +425,6 @@ void VmFsm::onEnterPantallaFin() {
     _inactivityTimer = millis();
 }
 
-// ===========================================================================
-// 6. handleKey() y processKey*() – manejo de teclado por estado
-// ===========================================================================
-
 void VmFsm::handleKey(char key) {
     KeyMode mode = KeyMode::PAGO;
     if (_state == FsmState::S2_REPOSO)       mode = KeyMode::REPOSO;
@@ -518,19 +437,17 @@ void VmFsm::handleKey(char key) {
         case FsmState::S3_SEL_CANAL:     processKeySelCanal(action);    break;
         case FsmState::S4_SEL_PAGO:      processKeySelPago(action);     break;
         case FsmState::S5_ESP_EFECTIVO:  processKeyEspEfectivo(action); break;
-        case FsmState::S6_ESP_RFID: {
+        case FsmState::S6_ESP_RFID:
             if (action == KeyAction::CANCEL_ABORT ||
                 action == KeyAction::CHOOSE_RFID) {
                 enterState(FsmState::S2_REPOSO);
             }
             break;
-        }
         default:
-            break; // S7..S12: no hay entradas de teclado relevantes
+            break;
     }
 }
 
-// S2 – Reposo: teclas 1-4 seleccionan canal
 void VmFsm::processKeyReposo(KeyAction a) {
     if (a >= KeyAction::SELECT_1 && a <= KeyAction::SELECT_4) {
         _selectedSlot = (uint8_t)a - (uint8_t)KeyAction::SELECT_1 + 1u;
@@ -538,7 +455,6 @@ void VmFsm::processKeyReposo(KeyAction a) {
     }
 }
 
-// S3 – Selección de canal: A confirma, * cancela
 void VmFsm::processKeySelCanal(KeyAction a) {
     if (a == KeyAction::CHOOSE_CASH) {
         enterState(FsmState::S4_SEL_PAGO);
@@ -547,7 +463,6 @@ void VmFsm::processKeySelCanal(KeyAction a) {
     }
 }
 
-// S4 – Selección de pago: A=efectivo, B=RFID, *=cancelar
 void VmFsm::processKeySelPago(KeyAction a) {
     if (a == KeyAction::CHOOSE_CASH) {
         enterState(FsmState::S5_ESP_EFECTIVO);
@@ -567,7 +482,6 @@ void VmFsm::processKeySelPago(KeyAction a) {
     }
 }
 
-// S5 – Efectivo: teclas 1-4 agregan monedas ($1/$2/$5/$10), B cancela
 void VmFsm::processKeyEspEfectivo(KeyAction a) {
     if (a == KeyAction::CANCEL_ABORT) {
         enterState(FsmState::S2_REPOSO);
@@ -592,17 +506,12 @@ void VmFsm::processKeyEspEfectivo(KeyAction a) {
     }
 }
 
-// ===========================================================================
-// 7. Constructores de pantallas del carrusel
-// ===========================================================================
-
-// Pantalla de reposo: idx=0 muestra slots 1-2, idx=1 muestra slots 3-4
 void VmFsm::buildReposoScreen(uint8_t idx,
                                char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
     memset(lines, 0, LCD_LINE_LEN * LCD_LINE_COUNT);
     snprintf(lines[0], LCD_LINE_LEN, "  Selecciona canal  ");
 
-    uint8_t start = (idx % 2u) * 2u; // 0→slots 1&2, 1→slots 3&4
+    uint8_t start = (idx % 2u) * 2u; // 0 -> slots 1 y 2, 1 -> slots 3 y 4
     for (uint8_t i = 0; i < 2u; i++) {
         uint8_t slotNum = start + i + 1u;
         SlotInfo info;
@@ -618,7 +527,6 @@ void VmFsm::buildReposoScreen(uint8_t idx,
     }
 }
 
-// Slide 0 de la pantalla final: mensaje de éxito
 void VmFsm::buildFinSuccessScreen(uint8_t /*idx*/,
                                    char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
     memset(lines, 0, LCD_LINE_LEN * LCD_LINE_COUNT);
@@ -628,7 +536,6 @@ void VmFsm::buildFinSuccessScreen(uint8_t /*idx*/,
     snprintf(lines[3], LCD_LINE_LEN, "  producto!          ");
 }
 
-// Slide de pago RFID: monto cobrado y saldo restante en la tarjeta
 void VmFsm::buildFinRfidScreen(uint8_t /*idx*/,
                                 char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
     memset(lines, 0, LCD_LINE_LEN * LCD_LINE_COUNT);
@@ -641,13 +548,11 @@ void VmFsm::buildFinRfidScreen(uint8_t /*idx*/,
     snprintf(lines[3], LCD_LINE_LEN, "  Gracias!           ");
 }
 
-// Slides de cambio: un slide por denominación no nula (mayor → menor)
-// idx es la posición en el carrusel; idx=1 → _changeDenoms[0], etc.
 void VmFsm::buildChangeScreen(uint8_t idx,
                                char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
-    memset(lines, 0, LCD_LINE_LEN * LCD_LINE_COUNT);
+    memset(lines, 0, LCD_LINE_COUNT * LCD_LINE_LEN);
 
-    // idx=1 es el primer slide de cambio (idx=0 = éxito)
+    // idx=1 es la primera slide de cambio (idx=0 es éxito)
     uint8_t denomIdx = (idx > 0u) ? (idx - 1u) : 0u;
     if (denomIdx >= _changeSlides) return;
 
@@ -657,19 +562,16 @@ void VmFsm::buildChangeScreen(uint8_t idx,
     char denomBuf[16];
     formatMoney(denom, denomBuf, sizeof(denomBuf));
 
-    char l2[VM_DISPLAY_LINE_LEN];
     char l3[VM_DISPLAY_LINE_LEN];
-    snprintf(l2, sizeof(l2), "  Denominacion:     ");
     snprintf(l3, sizeof(l3), "  %-7s x %lu pieza%s",
              denomBuf, (unsigned long)qty, (qty == 1u ? "" : "s"));
 
     snprintf(lines[0], LCD_LINE_LEN, "  Tu cambio:        ");
-    snprintf(lines[1], LCD_LINE_LEN, "%s", l2);
+    snprintf(lines[1], LCD_LINE_LEN, "  Denominacion:     ");
     snprintf(lines[2], LCD_LINE_LEN, "%s", l3);
     snprintf(lines[3], LCD_LINE_LEN, "  Recoge tu cambio  ");
 }
 
-// Pantalla de inserción de efectivo: muestra acumulado, faltante y teclas válidas
 void VmFsm::renderEfectivoScreen() {
     uint32_t falta = (_slotInfo.priceCentavos > _insertedCentavos)
                          ? (_slotInfo.priceCentavos - _insertedCentavos) : 0u;

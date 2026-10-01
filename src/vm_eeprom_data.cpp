@@ -1,8 +1,3 @@
-/**
- * @file vm_eeprom_data.cpp
- * @brief Persistencia en EEPROM para la máquina expendedora.
- */
-
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <string.h>
@@ -10,31 +5,22 @@
 #include "vm_eeprom_data.h"
 #include "vm_board_config.h"
 
-// ---------------------------------------------------------------------------
-// Layout en EEPROM (offsets desde VM_EEPROM_START_ADDR)
-//
-//  0     : MAGIC0 ('S')
-//  1     : MAGIC1 ('A')
-//  2     : VERSION (3)
-//  3..22 : Caja de efectivo: 4 × (denom u32 + qty u8) = 20 bytes
-//  23..114: Slots: 4 × (name[16] + price u32 + stock u8 + cap u8 + ena u8) = 23 bytes c/u
-//           Total: 23 × 4 = 92 bytes
-// ---------------------------------------------------------------------------
+// Layout EEPROM (v3):
+//  0..2   : MAGIC0 ('S'), MAGIC1 ('A'), VERSION (3)
+//  3..22  : Caja (4 denominaciones x 5 bytes = 20 bytes)
+//  23..114: Slots (4 slots x 23 bytes = 92 bytes)
 enum {
     OFF_MAGIC0  = 0,
     OFF_MAGIC1  = 1,
     OFF_VERSION = 2,
-    OFF_CASH    = 3,   // 20 bytes  (3..22)
-    OFF_SLOTS   = 23   // 92 bytes  (23..114)
+    OFF_CASH    = 3,
+    OFF_SLOTS   = 23
 };
 
 static const uint8_t MAGIC0  = 'S';
 static const uint8_t MAGIC1  = 'A';
-static const uint8_t VERSION = 3u;  // versión 3: sin PIN, sin registro transaccional
+static const uint8_t VERSION = 3u;
 
-// ---------------------------------------------------------------------------
-// Semilla de productos (guardada en Flash para ahorrar RAM)
-// ---------------------------------------------------------------------------
 typedef struct {
     char     name[16];
     uint32_t priceCentavos;
@@ -49,17 +35,14 @@ static const SeedSlot SEED_SLOTS[VM_CHANNEL_MAX] PROGMEM = {
     { "Jugo Naranja",    1400u, 5u, 10u },
 };
 
-// Denominaciones de moneda: $1, $2, $5, $10 (en centavos)
 static const uint32_t SEED_CASH_DENOMS[4] PROGMEM = { 100u, 200u, 500u, 1000u };
 
-// ---------------------------------------------------------------------------
-// Funciones auxiliares de EEPROM
-// ---------------------------------------------------------------------------
 static uint16_t ea(uint8_t off) {
     return (uint16_t)VM_EEPROM_START_ADDR + (uint16_t)off;
 }
+
 static void ewrite(uint8_t off, uint8_t v) { EEPROM.update(ea(off), v); }
-static uint8_t eread(uint8_t off)           { return EEPROM.read(ea(off)); }
+static uint8_t eread(uint8_t off)          { return EEPROM.read(ea(off)); }
 
 static void ewrite32(uint8_t off, uint32_t v) {
     ewrite(off,     (uint8_t)(v         & 0xFFu));
@@ -75,9 +58,6 @@ static uint32_t eread32(uint8_t off) {
          | ((uint32_t)eread(off + 3) << 24);
 }
 
-// ---------------------------------------------------------------------------
-// VmEepromData
-// ---------------------------------------------------------------------------
 VmEepromData::VmEepromData() {
     memset(_slots, 0, sizeof(_slots));
     memset(_cash,  0, sizeof(_cash));
@@ -167,15 +147,11 @@ bool VmEepromData::begin() {
         loadAll();
         return true;
     }
-    // Primera ejecución o versión distinta: inicializar con datos semilla
     seedCache();
     persistAll();
     return hasMagic();
 }
 
-// ---------------------------------------------------------------------------
-// Slots de producto
-// ---------------------------------------------------------------------------
 bool VmEepromData::getSlot(uint8_t slotId, SlotInfo& out) const {
     if (slotId < VM_CHANNEL_MIN || slotId > VM_CHANNEL_MAX) return false;
     const Slot& s = _slots[slotId - 1u];
@@ -206,9 +182,6 @@ void VmEepromData::releaseStock(uint8_t slotId) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Caja de efectivo
-// ---------------------------------------------------------------------------
 bool VmEepromData::getCoinStock(uint32_t denomCentavos, uint32_t& outStock) const {
     for (uint8_t i = 0; i < 4; i++) {
         if (_cash[i].denom == denomCentavos) {
@@ -223,7 +196,7 @@ bool VmEepromData::addCoins(uint32_t denomCentavos, uint32_t count) {
     for (uint8_t i = 0; i < 4; i++) {
         if (_cash[i].denom == denomCentavos) {
             uint32_t qty = (uint32_t)_cash[i].qty + count;
-            if (qty > 250u) qty = 250u; // tope de seguridad
+            if (qty > 250u) qty = 250u;
             _cash[i].qty = (uint8_t)qty;
             persistCash(i);
             return true;

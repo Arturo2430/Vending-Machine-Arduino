@@ -1,8 +1,3 @@
-/**
- * @file vm_carousel.cpp
- * @brief Implementación del carrusel de subpantallas del LCD 20x4.
- */
-
 #include <string.h>
 #include "vm_carousel.h"
 
@@ -17,8 +12,7 @@ VmCarousel::VmCarousel(VmCarouselCallback callback)
 
 void VmCarousel::begin() {
     _currentIndex = 0;
-    // Restar el intervalo para que la primera subpantalla se muestre
-    // inmediatamente en el siguiente update().
+    // Forzar visualizacion inmediata en el primer update()
     _lastSwitchMs = (unsigned long)(millis() - VM_CAROUSEL_INTERVAL_MS);
 }
 
@@ -47,7 +41,6 @@ void VmCarousel::update() {
         _screens[idx](idx, lines);
         _callback(lines[0], lines[1], lines[2], lines[3]);
 
-        // Avanzar al siguiente slide para la próxima rotación
         _currentIndex = (idx + 1u) % _numScreens;
     }
 }

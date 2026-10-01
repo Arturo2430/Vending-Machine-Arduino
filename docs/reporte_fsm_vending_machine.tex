@@ -18,7 +18,7 @@
 \usepackage{caption}
 \usepackage{parskip}
 \usepackage{microtype}
-\usepackage{pdflscape}   % página apaisada para el diagrama UML
+\usepackage{afterpage}   % para cambio de geometría en página específica
 \usepackage{hyperref}
 \hypersetup{
     colorlinks = true,
@@ -50,30 +50,6 @@
     belowskip    = 4pt
 }
 
-\definecolor{stateColor}{RGB}{52,120,190}
-\definecolor{decisionColor}{RGB}{230,140,30}
-\definecolor{failColor}{RGB}{200,60,60}
-
-% Estilos TikZ para el diagrama UML de actividades
-\tikzset{
-    umlstart/.style = {circle, fill=black, minimum size=10pt, inner sep=0},
-    umlend/.style   = {circle, fill=white, draw=black, minimum size=12pt, inner sep=0,
-                       path picture={\fill[black] circle[radius=3pt];}},
-    umlstate/.style = {rectangle, rounded corners=3pt,
-                       fill=stateColor!18, draw=stateColor, thick,
-                       minimum width=4.4cm, minimum height=0.65cm,
-                       text centered, font=\small\sffamily},
-    umlfail/.style  = {rectangle, rounded corners=3pt,
-                       fill=failColor!15, draw=failColor, thick,
-                       minimum width=4.4cm, minimum height=0.65cm,
-                       text centered, font=\small\sffamily},
-    umldec/.style   = {diamond, aspect=2.3,
-                       fill=decisionColor!18, draw=decisionColor, thick,
-                       minimum width=3.2cm, minimum height=0.9cm,
-                       text centered, font=\small\sffamily},
-    arr/.style      = {->, >=Stealth, thick, draw=gray!65!black},
-    lbl/.style      = {font=\scriptsize\sffamily, fill=white, inner sep=1.5pt}
-}
 
 % ===========================================================================
 \begin{document}
@@ -205,7 +181,7 @@ _motorTimer = millis();                           // arrancar
 
 // En update():
 if ((uint32_t)(millis() - _motorTimer) >= VM_TIMEOUT_MOTOR_MS)
-    // ... acción de timeout
+    // ... accion de timeout
 \end{lstlisting}
 
 \begin{table}[H]
@@ -399,100 +375,292 @@ seguido de un slide por cada denominación no nula (de \$10 a \$1) o el
 resumen de cobro RFID. Regresa a $S_2$ al completar todos los slides + 1\,s.
 
 % ===========================================================================
-\section{Diagrama UML de Actividades}
+\section{Diagrama de Estados UML}
 % ===========================================================================
 
-\begin{landscape}
-\begin{figure}[p]
-\centering
-\begin{tikzpicture}[
-    node distance=0.42cm and 2.6cm,
-    every node/.style={align=center},
-    transform canvas={scale=0.9}
-]
+Cada estado muestra sus condiciones de entrada y de salida con el estado destino.
+La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pagina.
 
-% ============ COLUMNA PRINCIPAL ============
+\clearpage
+\pdfpagewidth=54cm
+\pdfpageheight=30cm
+\paperwidth=54cm
+\paperheight=30cm
+\textwidth=52cm
+\textheight=28cm
+\vsize=28cm
+\hsize=52cm
+\pdfhorigin=1cm
+\pdfvorigin=1cm
+\oddsidemargin=0cm
+\topmargin=0cm
+\headheight=0cm
+\headsep=0cm
+\thispagestyle{empty}
 
-\node[umlstart]                         (ini)  {};
-\node[umlstate, below=0.45cm of ini]    (s0)   {$S_0$: Arranque};
-\node[umlstate, below=of s0]            (s2)   {$S_2$: Reposo (carrusel)};
-\node[umlstate, below=of s2]            (s3)   {$S_3$: Sel. Canal};
-\node[umldec,   below=of s3]            (dCan) {Slot\\habilitado?};
-\node[umlstate, below=of dCan]          (s4)   {$S_4$: Sel. Pago};
-\node[umldec,   below=of s4]            (dPag) {Método?};
+\begin{center}
+\tikzset{
+  sbox/.style={
+    rectangle, rounded corners=4pt,
+    draw=blue!55!black, thick,
+    fill=blue!6,
+    text width=3.8cm,
+    minimum height=3.0cm,
+    align=center,
+    font=\fontsize{6.8}{8.5}\selectfont\sffamily,
+    inner sep=4pt
+  },
+  failbox/.style={
+    sbox, fill=red!6, draw=red!55!black
+  },
+  startcirc/.style={
+    circle, fill=black, minimum size=11pt, inner sep=0
+  },
+  arr/.style={
+    ->, >=Stealth, draw=gray!70!black, line width=0.7pt
+  },
+  lbl/.style={
+    font=\fontsize{6.2}{7.5}\selectfont\sffamily,
+    fill=white, inner sep=1.8pt, align=center
+  }
+}
 
-% Rama Efectivo (izquierda)
-\node[umlstate, below left=1cm and 1.4cm of dPag]  (s5) {$S_5$: Esp. Efectivo\\(teclas 1–4)};
-% Rama RFID (derecha)
-\node[umlstate, below right=1cm and 1.4cm of dPag] (s6) {$S_6$: Esp. RFID\\(sondeo)};
+\begin{tikzpicture}[font=\fontsize{6.8}{8.5}\selectfont\sffamily]
 
-% Punto de unión
-\coordinate (joinPago) at ($(s5.south)!0.5!(s6.south) + (0,-0.9)$);
+% Inicio
+\node[startcirc] (start) at (-2.4, 0) {};
 
-\node[umlstate, below=2.4cm of dPag]   (s7)   {$S_7$: Reservada\\(stock + motor.start)};
-\node[umldec,   below=of s7]            (dMot) {Motor\\arrancó?};
-\node[umlstate, below=of dMot]          (s8)   {$S_8$: Dispensando\\(esperar barrera)};
-\node[umldec,   below=of s8]            (dBar) {Barrera\\detectada?};
-\node[umlstate, below=of dBar]          (s9)   {$S_9$: Confirmada (1\,s)};
-\node[umldec,   below=of s9]            (dMet) {Pago RFID?};
+% Fila principal y=0
+\node[sbox] (s0) at (0, 0) {
+  \textbf{S0: ARRANQUE}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} encendido del\\
+  microcontrolador\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  EEPROM OK $\to$ S2\\
+  EEPROM falla $\to$ S1
+};
 
-\node[umlstate, below left=0.9cm and 1.3cm of dMet]  (s11) {$S_{11}$: Calc. Cambio\\(greedy)};
-\node[umlstate, below right=0.9cm and 1.3cm of dMet] (s12r){$S_{12}$: Pantalla Fin\\(RFID)};
+\node[sbox] (s2) at (5.8, 0) {
+  \textbf{S2: REPOSO}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} arranque / cancel. /\\
+  timeout / error / fin compra\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  tecla 1--4 $\to$ S3
+};
 
-\node[umlstate, below=2.4cm of dMet]   (s12)  {$S_{12}$: Pantalla Fin\\(efectivo + carrusel cambio)};
-\node[umlend,   below=0.7cm of s12]    (fin)  {};
+\node[sbox] (s3) at (11.6, 0) {
+  \textbf{S3: SEL\_CANAL}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} tecla 1--4 en S2\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  {[A]} confirmar $\to$ S4\\
+  {[*]} / timeout $\to$ S2
+};
 
-% Nodo de falla (lado derecho)
-\node[umlfail, right=3.8cm of s8]      (s10)  {$S_{10}$: Falla Disp.\\(rollback 3\,s)};
+\node[sbox] (s4) at (17.4, 0) {
+  \textbf{S4: SEL\_PAGO}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} {[A]} en S3\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  {[A]} efectivo $\to$ S5\\
+  {[B]} RFID $\to$ S6\\
+  {[*]} $\to$ S2
+};
 
-% ============ FLECHAS PRINCIPALES ============
+\node[sbox] (s7) at (25.6, 0) {
+  \textbf{S7: RESERVADA}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} monto cubierto\\
+  (efectivo o RFID OK)\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  stock OK + motor $\to$ S8\\
+  sin stock (1.5s) $\to$ S2\\
+  motor falla $\to$ S10
+};
 
-\draw[arr] (ini) -- (s0);
-\draw[arr] (s0)  -- node[lbl,right] {inmediato} (s2);
-\draw[arr] (s2)  -- node[lbl,right] {tecla 1–4} (s3);
-\draw[arr] (s3)  -- (dCan);
-\draw[arr] (dCan) -- node[lbl,right] {Sí / [A]} (s4);
-\draw[arr] (dCan.west) -- ++(-1.3,0) |- node[lbl,left,near start] {No} (s2.west);
+\node[sbox] (s8) at (31.4, 0) {
+  \textbf{S8: DISPENSANDO}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} motor.start()\\
+  exitoso\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  barrera optica $\to$ S9\\
+  timeout 10s $\to$ S10
+};
 
-\draw[arr] (s4) -- (dPag);
-\draw[arr] (dPag.west) -- ++(-0.4,0) |- node[lbl,left,near start] {[A] Efectivo} (s5.north);
-\draw[arr] (dPag.east) -- ++(0.4,0)  |- node[lbl,right,near start] {[B] RFID} (s6.north);
+\node[sbox] (s9) at (37.2, 0) {
+  \textbf{S9: CONFIRMADA}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} barrera optica\\
+  confirma caida\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  1s + efectivo $\to$ S11\\
+  1s + RFID $\to$ S12
+};
 
-\draw[arr] (s5.south) |- (joinPago) -- (s7.north);
-\draw[arr] (s6.south) |- (joinPago);
+\node[sbox] (s12) at (43.0, 0) {
+  \textbf{S12: PANTALLA\_FIN}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} RFID confirmado /\\
+  cambio calculado (S11)\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  fin carrusel $\to$ S2
+};
 
-\draw[arr] (s7) -- (dMot);
-\draw[arr] (dMot) -- node[lbl,right] {Sí} (s8);
-\draw[arr] (dMot.east) -- ++(0.3,0) |- node[lbl,right,near start] {No (barrera ocup.)} (s10.north);
-\draw[arr] (s8)  -- (dBar);
-\draw[arr] (dBar) -- node[lbl,right] {Sí} (s9);
-\draw[arr] (dBar.east) -- ++(0.3,0) |- node[lbl,right,near start] {No (timeout 10\,s)} (s10.south);
+% Fila superior: S5 (y = +5.2)
+\node[sbox] (s5) at (21.5, 5.2) {
+  \textbf{S5: ESP\_EFECTIVO}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} {[A]} en S4\\
+  teclas 1--4: \$1/\$2/\$5/\$10\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  monto $\ge$ precio $\to$ S7\\
+  {[B]} / timeout $\to$ S2
+};
 
-\draw[arr] (s10.west) -- ++(-0.9,0) |- node[lbl,left,near end] {→ $S_2$} (s2.east);
+% Fila inferior (y = -5.2)
+\node[failbox] (s1) at (0, -5.2) {
+  \textbf{S1: FALLA\_INTERNA}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} EEPROM.begin()\\
+  falla (retorna false)\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:} ninguna\\
+  (bloqueo del sistema)
+};
 
-\draw[arr] (s9) -- (dMet);
-\draw[arr] (dMet.west) -- ++(-0.4,0) |- node[lbl,left,near start] {No (efectivo)} (s11.north);
-\draw[arr] (dMet.east) -- ++(0.4,0)  |- node[lbl,right,near start] {Sí (RFID)} (s12r.north);
+\node[sbox] (s6) at (21.5, -5.2) {
+  \textbf{S6: ESP\_RFID}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} {[B]} en S4\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  RFID OK + saldo $\ge$ precio $\to$ S7\\
+  error / {[B]} / timeout $\to$ S2
+};
 
-\draw[arr] (s11.south)  |- ($(s12.north)+(0,0.15)$) -- (s12.north);
-\draw[arr] (s12r.south) |- ($(s12.north)+(0,0.15)$);
+\node[sbox] (s10) at (29.5, -5.2) {
+  \textbf{S10: FALLA\_DISP}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} motor falla (S7)\\
+  o timeout 10s (S8)\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  rollback stock + 3s $\to$ S2
+};
 
-\draw[arr] (s12) -- (fin);
-\draw[arr] (s12.west) -- ++(-4.2,0) |- node[lbl,left,near end] {→ $S_2$} (s2.west);
+\node[sbox] (s11) at (38.0, -5.2) {
+  \textbf{S11: CALC\_CAMBIO}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} 1s en S9\\
+  (pago en efectivo)\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  cambio OK $\to$ S12\\
+  sin fondos (5s) $\to$ S2
+};
 
-% Cancelaciones
-\draw[arr] (s3.west)  -- ++(-1.6,0) |- node[lbl,left,near start] {[*] Cancelar} (s2.west);
-\draw[arr] (s5.west)  -- ++(-0.7,0) |- node[lbl,left,near start] {[B]/timeout} (s2.west);
-\draw[arr] (s6.east)  -- ++(0.7,0)  |- node[lbl,right,near start] {[B]/error} (s2.east);
+% === TRANSICIONES ORTOGONALES ===
 
-% Sin stock (S7 → S2 tras 1.5 s)
-\draw[arr] (s7.west) -- ++(-1.2,0) |- node[lbl,left,near start] {sin stock, 1.5\,s} (s2.west);
+% start -> S0
+\draw[arr] (start) -- (s0.west);
+
+% S0 -> S2
+\draw[arr] (s0.east) -- node[lbl, above] {EEPROM OK} (s2.west);
+
+% S0 -> S1
+\draw[arr] (s0.south) -- node[lbl, right] {EEPROM falla} (s1.north);
+
+% S2 -> S3
+\draw[arr] (s2.east) -- node[lbl, above] {tecla 1--4} (s3.west);
+
+% S3 -> S4
+\draw[arr] (s3.east) -- node[lbl, above] {[A] confirmar} (s4.west);
+
+% S3 -> S2 (cancel/timeout)
+\draw[arr] (s3.north) -- ++(0, 1.0) -| node[lbl, above, pos=0.25] {[*] / timeout} ($(s2.north)+(1.2,0)$);
+
+% S4 -> S2 (cancel)
+\draw[arr] ($(s4.north)+(-0.8,0)$) -- ++(0, 1.8) -| node[lbl, above, pos=0.25] {[*] cancelar} ($(s2.north)+(0.6,0)$);
+
+% S4 -> S5 (efectivo)
+\draw[arr] ($(s4.north)+(0.8,0)$) |- node[lbl, left, pos=0.6] {[A] efectivo} (s5.west);
+
+% S4 -> S6 (RFID)
+\draw[arr] ($(s4.south)+(0.8,0)$) |- node[lbl, left, pos=0.6] {[B] RFID} (s6.west);
+
+% S5 -> S7 (monto cubierto)
+\draw[arr] (s5.east) -| node[lbl, right, pos=0.3] {monto $\ge$ precio} ($(s7.north)+(-0.8,0)$);
+
+% S5 -> S2 (cancel/timeout) - ruta alta sobre S5
+\draw[arr] (s5.north) -- ++(0, 1.0) -| node[lbl, above, pos=0.2] {[B] / timeout} ($(s2.north)+(0.0,0)$);
+
+% S6 -> S7 (RFID OK)
+\draw[arr] (s6.east) -| node[lbl, right, pos=0.3] {RFID OK + saldo OK} ($(s7.south)+(-0.8,0)$);
+
+% S6 -> S2 (error/cancel)
+\draw[arr] (s6.south) -- ++(0, -1.8) -| node[lbl, below, pos=0.2] {error / [B] / timeout} ($(s2.south)+(0.8,0)$);
+
+% S7 -> S8
+\draw[arr] (s7.east) -- node[lbl, above] {stock OK + motor} (s8.west);
+
+% S7 -> S2 (sin stock) - pasa limpiamente por arriba de S5
+\draw[arr] ($(s7.north)+(0.5,0)$) -- ++(0, 6.9) -| node[lbl, above, pos=0.15] {sin stock (1.5s)} ($(s2.north)+(-0.6,0)$);
+
+% S7 -> S10 (motor falla)
+\draw[arr] ($(s7.south)+(0.5,0)$) |- node[lbl, above, pos=0.7] {motor falla} ($(s10.north)+(-0.7,0)$);
+
+% S8 -> S9
+\draw[arr] (s8.east) -- node[lbl, above] {barrera OK} (s9.west);
+
+% S8 -> S10 (timeout 10s)
+\draw[arr] (s8.south) |- node[lbl, above, pos=0.7] {timeout 10s} ($(s10.north)+(0.7,0)$);
+
+% S9 -> S12 (RFID)
+\draw[arr] (s9.east) -- node[lbl, above] {1s + RFID} (s12.west);
+
+% S9 -> S11 (efectivo)
+\draw[arr] (s9.south) -- node[lbl, right] {1s + efectivo} (s11.north);
+
+% S10 -> S2 (rollback)
+\draw[arr] (s10.south) -- ++(0, -1.0) -| node[lbl, below, pos=0.15] {rollback + 3s} ($(s2.south)+(0,0)$);
+
+% S11 -> S12 (cambio OK)
+\draw[arr] (s11.east) -| node[lbl, right, pos=0.4] {cambio OK} (s12.south);
+
+% S11 -> S2 (sin fondos)
+\draw[arr] (s11.south) -- ++(0, -2.6) -| node[lbl, below, pos=0.12] {sin fondos (5s)} ($(s2.south)+(-0.8,0)$);
+
+% S12 -> S2 (fin carrusel) - ruta superior sin cruces
+\draw[arr] (s12.north) -- ++(0, 7.6) -| node[lbl, above, pos=0.12] {fin carrusel $\to$ S2} ($(s2.north)+(-1.2,0)$);
 
 \end{tikzpicture}
-\caption{Diagrama UML de actividades de la FSM — máquina expendedora Arduino Mega 2560}
-\label{fig:uml}
-\end{figure}
-\end{landscape}
+\vspace{0.4cm}
+
+\captionof{figure}{Diagrama de estados UML de la FSM de la máquina expendedora (13 estados). Cada estado muestra sus condiciones de entrada (\textit{Entra:}) y de salida (\textit{Sale:}) con el estado destino. Todas las transiciones siguen trayectorias ortogonales.}
+\label{fig:estadosuml}
+\end{center}
+
+\clearpage
+\pdfpagewidth=21cm
+\pdfpageheight=29.7cm
+\paperwidth=21cm
+\paperheight=29.7cm
+\vsize=24.7cm
+\hsize=15.4cm
+\restoregeometry
+
 
 % ===========================================================================
 \section{Conclusiones}
