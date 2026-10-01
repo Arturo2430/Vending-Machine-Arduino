@@ -4,20 +4,22 @@
 #include <stdint.h>
 
 enum class KeyMode : uint8_t {
-    REPOSO   = 0,
-    PAGO     = 1,
-    EFECTIVO = 2
+    STANDBY = 0,
+    PAYMENT = 1,
+    CASH    = 2,
+    PROMPT  = 3
 };
 
 enum class KeyAction : uint8_t {
-    IGNORAR      = 0,
+    IGNORE_KEY   = 0,
     CANCEL_ABORT = 1,
     SELECT_1     = 4,
     SELECT_2     = 5,
     SELECT_3     = 6,
     SELECT_4     = 7,
     CHOOSE_CASH  = 17,
-    CHOOSE_RFID  = 18
+    CHOOSE_RFID  = 18,
+    CONTINUE     = 19
 };
 
 class VmKeypad {

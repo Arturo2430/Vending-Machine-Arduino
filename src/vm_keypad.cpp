@@ -9,31 +9,36 @@ VmKeypad::VmKeypad() {
 }
 
 KeyAction VmKeypad::interpret(char key, KeyMode mode) {
-    if (mode == KeyMode::REPOSO) {
+    if (mode == KeyMode::STANDBY) {
         if (key == '1') return KeyAction::SELECT_1;
         if (key == '2') return KeyAction::SELECT_2;
         if (key == '3') return KeyAction::SELECT_3;
         if (key == '4') return KeyAction::SELECT_4;
-        return KeyAction::IGNORAR;
+        return KeyAction::IGNORE_KEY;
     }
 
-    if (mode == KeyMode::PAGO) {
+    if (mode == KeyMode::PAYMENT) {
         if (key == 'A') return KeyAction::CHOOSE_CASH;
         if (key == 'B') return KeyAction::CHOOSE_RFID;
         if (key == '*') return KeyAction::CANCEL_ABORT;
-        return KeyAction::IGNORAR;
+        return KeyAction::IGNORE_KEY;
     }
 
-    if (mode == KeyMode::EFECTIVO) {
-        if (key == 'B') return KeyAction::CANCEL_ABORT;
+    if (mode == KeyMode::CASH) {
+        if (key == '*') return KeyAction::CANCEL_ABORT;
         if (key == '1') return KeyAction::SELECT_1;
         if (key == '2') return KeyAction::SELECT_2;
         if (key == '3') return KeyAction::SELECT_3;
         if (key == '4') return KeyAction::SELECT_4;
-        return KeyAction::IGNORAR;
+        return KeyAction::IGNORE_KEY;
     }
 
-    return KeyAction::IGNORAR;
+    if (mode == KeyMode::PROMPT) {
+        if (key == 'A') return KeyAction::CONTINUE;
+        return KeyAction::IGNORE_KEY;
+    }
+
+    return KeyAction::IGNORE_KEY;
 }
 
 uint32_t VmKeypad::coinActionToCentavos(KeyAction action) const {

@@ -305,19 +305,20 @@ Ejemplo: si el cambio es \$7.00, el carrusel muestra tres slides:
 \toprule
 \textbf{ID} & \textbf{Nombre} & \textbf{Propósito} & \textbf{Transiciones de salida} \\
 \midrule
-$S_0$  & \texttt{S0\_ARRANQUE}      & Inicialización; muestra mensaje de bienvenida. & → $S_2$ inmediatamente. \\
-$S_1$  & \texttt{S1\_FALLA\_INTERNA}& Error crítico de EEPROM; sistema detenido.     & Estado terminal. \\
-$S_2$  & \texttt{S2\_REPOSO}        & Carrusel del catálogo (2 slides de 2 productos). & → $S_3$ (tecla 1–4). \\
-$S_3$  & \texttt{S3\_SEL\_CANAL}    & Confirmar producto elegido.  & → $S_4$ [A] / $S_2$ [*] / timeout. \\
-$S_4$  & \texttt{S4\_SEL\_PAGO}     & Elegir método: efectivo o RFID. & → $S_5$ [A] / $S_6$ [B] / $S_2$ [*]. \\
-$S_5$  & \texttt{S5\_ESP\_EFECTIVO} & Acumular monedas (teclas 1–4: \$1/\$2/\$5/\$10). & → $S_7$ (monto $\geq$ precio) / $S_2$ [B] / timeout. \\
-$S_6$  & \texttt{S6\_ESP\_RFID}     & Sondear RFID y cobrar saldo. & → $S_7$ (OK) / $S_2$ (error/timeout/[B]). \\
-$S_7$  & \texttt{S7\_RESERVADA}     & Reservar stock y arrancar motor. & → $S_8$ (OK) / $S_{10}$ (motor falló) / $S_2$ (sin stock, 1.5\,s). \\
-$S_8$  & \texttt{S8\_DISPENSANDO}   & Motor activo; esperar barrera óptica.  & → $S_9$ (barrera OK) / $S_{10}$ (timeout 10\,s). \\
-$S_9$  & \texttt{S9\_CONFIRMADA}    & Entrega confirmada; esperar 1\,s. & → $S_{11}$ (efectivo) / $S_{12}$ (RFID). \\
-$S_{10}$& \texttt{S10\_FALLA\_DISP} & Rollback de stock; mensaje de error 3\,s. & → $S_2$. \\
-$S_{11}$& \texttt{S11\_CALC\_CAMBIO}& Algoritmo greedy; preparar slides de cambio. & → $S_{12}$ (éxito) / $S_2$ (sin fondos, 5\,s). \\
-$S_{12}$& \texttt{S12\_PANTALLA\_FIN}& Carrusel: éxito + una diapositiva por denominación no nula. & → $S_2$. \\
+$S_0$  & \texttt{S0\_START}      & Inicialización; muestra mensaje de bienvenida. & → $S_2$ inmediatamente. \\
+$S_1$  & \texttt{S1\_INTERNAL\_ERROR}& Error crítico de EEPROM; sistema detenido.     & Estado terminal. \\
+$S_2$  & \texttt{S2\_STANDBY}        & Carrusel del catálogo (2 slides de 2 productos). & → $S_3$ (tecla 1–4). \\
+$S_3$  & \texttt{S3\_SELECT\_CHANNEL}    & Confirmar producto elegido.  & → $S_4$ [A] / $S_2$ [*] / timeout. \\
+$S_4$  & \texttt{S4\_SELECT\_PAYMENT}     & Elegir método: efectivo o RFID. & → $S_5$ [A] / $S_6$ [B] / $S_2$ [*]. \\
+$S_5$  & \texttt{S5\_WAIT\_CASH} & Acumular monedas (teclas 1–4: \$1/\$2/\$5/\$10). & → $S_7$ (monto $\geq$ precio) / $S_2$ [B] / timeout. \\
+$S_6$  & \texttt{S6\_WAIT\_RFID}     & Sondear RFID y cobrar saldo. & → $S_7$ (OK) / $S_2$ (error/timeout/[B]). \\
+$S_7$  & \texttt{S7\_PREPARING\_VEND}     & Reservar stock y arrancar motor. & → $S_8$ (OK) / $S_{10}$ (motor falló) / $S_2$ (sin stock, 1.5\,s). \\
+$S_8$  & \texttt{S8\_DISPENSING}   & Motor activo; esperar barrera óptica.  & → $S_9$ (barrera OK) / $S_{10}$ (timeout 10\,s). \\
+$S_9$  & \texttt{S9\_CONFIRMED}    & Entrega confirmada; esperar 1\,s. & → $S_{11}$ (efectivo) / $S_{12}$ (RFID). \\
+$S_{10}$& \texttt{S10\_VEND\_ERROR} & Rollback de stock; mensaje de error 3\,s. & → $S_2$. \\
+$S_{11}$& \texttt{S11\_CALC\_CHANGE}& Algoritmo greedy; preparar slides de cambio. & → $S_{12}$ (éxito) / $S_2$ (sin fondos, 5\,s). \\
+$S_{12}$& \texttt{S12\_FINISH\_SCREEN} & Carrusel: éxito + una diapositiva por denominación no nula. & → $S_2$. \\
+$S_{13}$& \texttt{S13\_MESSAGE\_PROMPT} & Estado transitorio no bloqueante para mensajes (espera A). & Depende. \\
 \bottomrule
 \end{tabular}
 \caption{Los 13 estados de la FSM de la máquina expendedora}
@@ -374,8 +375,12 @@ Si no hay fondos suficientes, muestra aviso y espera 5\,s antes de volver a $S_2
 seguido de un slide por cada denominación no nula (de \$10 a \$1) o el
 resumen de cobro RFID. Regresa a $S_2$ al completar todos los slides + 1\,s.
 
+\paragraph{$S_{13}$ — Prompt de Mensaje.} Estado transitorio no bloqueante para mostrar
+mensajes al usuario y esperar la confirmación. Transita al estado destino configurado
+tras pulsar la tecla \texttt{A}.
+
 % ===========================================================================
-\section{Diagrama de Estados UML}
+\section{Diagrama de Maquina de Estados}
 % ===========================================================================
 
 Cada estado muestra sus condiciones de entrada y de salida con el estado destino.
@@ -432,7 +437,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 
 % Fila principal y=0
 \node[sbox] (s0) at (0, 0) {
-  \textbf{S0: ARRANQUE}\\[2pt]
+  \textbf{S0\_START}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} encendido del\\
   microcontrolador\\[2pt]
@@ -443,7 +448,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s2) at (5.8, 0) {
-  \textbf{S2: REPOSO}\\[2pt]
+  \textbf{S2\_STANDBY}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} arranque / cancel. /\\
   timeout / error / fin compra\\[2pt]
@@ -453,7 +458,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s3) at (11.6, 0) {
-  \textbf{S3: SEL\_CANAL}\\[2pt]
+  \textbf{S3\_SELECT\_CHANNEL}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} tecla 1--4 en S2\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
@@ -463,7 +468,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s4) at (17.4, 0) {
-  \textbf{S4: SEL\_PAGO}\\[2pt]
+  \textbf{S4\_SELECT\_PAYMENT}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} {[A]} en S3\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
@@ -474,7 +479,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s7) at (25.6, 0) {
-  \textbf{S7: RESERVADA}\\[2pt]
+  \textbf{S7\_PREPARING\_VEND}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} monto cubierto\\
   (efectivo o RFID OK)\\[2pt]
@@ -486,7 +491,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s8) at (31.4, 0) {
-  \textbf{S8: DISPENSANDO}\\[2pt]
+  \textbf{S8\_DISPENSING}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} motor.start()\\
   exitoso\\[2pt]
@@ -497,7 +502,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s9) at (37.2, 0) {
-  \textbf{S9: CONFIRMADA}\\[2pt]
+  \textbf{S9\_CONFIRMED}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} barrera optica\\
   confirma caida\\[2pt]
@@ -508,7 +513,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s12) at (43.0, 0) {
-  \textbf{S12: PANTALLA\_FIN}\\[2pt]
+  \textbf{S12\_FINISH\_SCREEN}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} RFID confirmado /\\
   cambio calculado (S11)\\[2pt]
@@ -517,9 +522,9 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
   fin carrusel $\to$ S2
 };
 
-% Fila superior: S5 (y = +5.2)
+% Fila superior: S5 y S13 (y = +5.2)
 \node[sbox] (s5) at (21.5, 5.2) {
-  \textbf{S5: ESP\_EFECTIVO}\\[2pt]
+  \textbf{S5\_WAIT\_CASH}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} {[A]} en S4\\
   teclas 1--4: \$1/\$2/\$5/\$10\\[2pt]
@@ -529,9 +534,19 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
   {[B]} / timeout $\to$ S2
 };
 
+\node[sbox] (s13) at (31.4, 5.2) {
+  \textbf{S13\_MESSAGE\_PROMPT}\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Entra:} invocado por\\
+  otros estados\\[2pt]
+  \rule{\linewidth}{0.3pt}\\[1pt]
+  \textit{Sale:}\\
+  {[A]} $\to$ estado destino
+};
+
 % Fila inferior (y = -5.2)
 \node[failbox] (s1) at (0, -5.2) {
-  \textbf{S1: FALLA\_INTERNA}\\[2pt]
+  \textbf{S1\_INTERNAL\_ERROR}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} EEPROM.begin()\\
   falla (retorna false)\\[2pt]
@@ -541,7 +556,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s6) at (21.5, -5.2) {
-  \textbf{S6: ESP\_RFID}\\[2pt]
+  \textbf{S6\_WAIT\_RFID}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} {[B]} en S4\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
@@ -551,7 +566,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s10) at (29.5, -5.2) {
-  \textbf{S10: FALLA\_DISP}\\[2pt]
+  \textbf{S10\_VEND\_ERROR}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} motor falla (S7)\\
   o timeout 10s (S8)\\[2pt]
@@ -561,7 +576,7 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 };
 
 \node[sbox] (s11) at (38.0, -5.2) {
-  \textbf{S11: CALC\_CAMBIO}\\[2pt]
+  \textbf{S11\_CALC\_CHANGE}\\[2pt]
   \rule{\linewidth}{0.3pt}\\[1pt]
   \textit{Entra:} 1s en S9\\
   (pago en efectivo)\\[2pt]

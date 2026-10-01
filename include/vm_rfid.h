@@ -48,6 +48,7 @@ private:
     bool readBalanceBlock(uint32_t& outBalance);
     bool writeBalanceBlock(uint32_t newBalance);
     void uidToHex();
+    void haltCard();
 };
 
 #endif // VM_RFID_H

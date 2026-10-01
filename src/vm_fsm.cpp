@@ -39,7 +39,7 @@ VmFsm::VmFsm(VmEepromData& data, VmMotorController& motor, VmRfid& rfid,
       _displayFn(displayFn),
       _carousel(displayFn),
       _changeCalc(),
-      _state(FsmState::S0_ARRANQUE),
+      _state(FsmState::S0_START),
       _selectedSlot(0),
       _insertedCentavos(0u),
       _stockReserved(false),
@@ -58,12 +58,12 @@ VmFsm::VmFsm(VmEepromData& data, VmMotorController& motor, VmRfid& rfid,
 
 void VmFsm::begin() {
     if (!_data.begin()) {
-        enterState(FsmState::S1_FALLA_INTERNA);
+        enterState(FsmState::S1_INTERNAL_ERROR);
         return;
     }
 
     pinMode(VM_PIN_BARRIER, INPUT_PULLUP);
-    enterState(FsmState::S0_ARRANQUE);
+    enterState(FsmState::S0_START);
 }
 
 void VmFsm::display(const char* l1, const char* l2,
@@ -76,21 +76,26 @@ void VmFsm::update() {
     _carousel.update();
 
     switch (_state) {
-        case FsmState::S0_ARRANQUE:
-            enterState(FsmState::S2_REPOSO);
+        case FsmState::S0_START:
+            enterState(FsmState::S2_STANDBY);
             break;
 
-        case FsmState::S3_SEL_CANAL:
-        case FsmState::S4_SEL_PAGO:
-        case FsmState::S5_ESP_EFECTIVO:
+        case FsmState::S3_SELECT_CHANNEL:
+        case FsmState::S4_SELECT_PAYMENT:
+        case FsmState::S5_WAIT_CASH:
             if (inactivityExpired()) {
-                enterState(FsmState::S2_REPOSO);
+                if (_insertedCentavos > 0) {
+                    _slotInfo.priceCentavos = 0;
+                    enterState(FsmState::S11_CALC_CHANGE);
+                } else {
+                    enterState(FsmState::S2_STANDBY);
+                }
             }
             break;
 
-        case FsmState::S6_ESP_RFID: {
+        case FsmState::S6_WAIT_RFID: {
             if (inactivityExpired()) {
-                enterState(FsmState::S2_REPOSO);
+                enterState(FsmState::S2_STANDBY);
                 break;
             }
 
@@ -103,14 +108,13 @@ void VmFsm::update() {
                     if (wr == RfidWriteResult::OK) {
                         _paymentMethod    = 1u;
                         _insertedCentavos = _slotInfo.priceCentavos;
-                        enterState(FsmState::S7_RESERVADA);
+                        enterState(FsmState::S7_PREPARING_VEND);
                     } else {
-                        display("  Error escritura   ",
-                                "  en tarjeta RFID   ",
-                                "  Reintente.        ",
-                                "                    ");
-                        delay(2000);
-                        enterState(FsmState::S2_REPOSO);
+                        showMessage("  Error escritura   ",
+                                    "  en tarjeta RFID   ",
+                                    "  Reintente.        ",
+                                    "  [A] Continuar     ",
+                                    FsmState::S2_STANDBY);
                     }
                 } else {
                     char l2[VM_DISPLAY_LINE_LEN], l3[VM_DISPLAY_LINE_LEN];
@@ -119,74 +123,71 @@ void VmFsm::update() {
                     formatMoney(_slotInfo.priceCentavos, priceBuf, sizeof(priceBuf));
                     snprintf(l2, sizeof(l2), " Saldo: %-12s", saldoBuf);
                     snprintf(l3, sizeof(l3), " Precio: %-11s", priceBuf);
-                    display("  Saldo insuficiente", l2, l3, "                    ");
-                    delay(3000);
-                    enterState(FsmState::S2_REPOSO);
+                    showMessage("  Saldo insuficiente", l2, l3, "  [A] Continuar     ", FsmState::S2_STANDBY);
                 }
             } else if (rr == RfidReadResult::AUTH_FAILED ||
                        rr == RfidReadResult::READ_FAILED) {
-                display("  Error al leer     ",
-                        "  la tarjeta RFID   ",
-                        "  Reintente.        ",
-                        "                    ");
-                delay(2000);
-                enterState(FsmState::S2_REPOSO);
+                showMessage("  Error al leer     ",
+                            "  la tarjeta RFID   ",
+                            "  Reintente.        ",
+                            "  [A] Continuar     ",
+                            FsmState::S2_STANDBY);
             }
             break;
         }
 
-        case FsmState::S7_RESERVADA:
-            if (!_stockReserved && (uint32_t)(millis() - _motorTimer) >= 1500u) {
-                enterState(FsmState::S2_REPOSO);
-            }
+        case FsmState::S7_PREPARING_VEND:
             break;
 
-        case FsmState::S8_DISPENSANDO:
+        case FsmState::S8_DISPENSING:
             if (_motor.isBusy()) {
                 if (motorTimerExpired()) {
                     _motor.stop();
                     _pendingResult = VM_RESULT_UNCERTAIN;
-                    enterState(FsmState::S10_FALLA_DISP);
+                    enterState(FsmState::S10_VEND_ERROR);
                 }
             } else {
                 int res = _motor.consumeResult();
                 if (res == VM_RESULT_DELIVERED) {
-                    enterState(FsmState::S9_CONFIRMADA);
+                    enterState(FsmState::S9_CONFIRMED);
                 } else {
                     _pendingResult = (res >= 0) ? (uint8_t)res : VM_RESULT_UNCERTAIN;
-                    enterState(FsmState::S10_FALLA_DISP);
+                    enterState(FsmState::S10_VEND_ERROR);
                 }
             }
             break;
 
-        case FsmState::S9_CONFIRMADA:
+        case FsmState::S9_CONFIRMED:
             if ((uint32_t)(millis() - _motorTimer) >= 1000u) {
                 if (_paymentMethod == 1u) {
                     memset(&_changeResult, 0, sizeof(_changeResult));
-                    enterState(FsmState::S12_PANTALLA_FIN);
+                    enterState(FsmState::S12_FINISH_SCREEN);
                 } else {
-                    enterState(FsmState::S11_CALC_CAMBIO);
+                    enterState(FsmState::S11_CALC_CHANGE);
                 }
             }
             break;
 
-        case FsmState::S10_FALLA_DISP:
-            if ((uint32_t)(millis() - _motorTimer) >= 3000u) {
-                enterState(FsmState::S2_REPOSO);
-            }
+        case FsmState::S10_VEND_ERROR:
             break;
 
-        case FsmState::S11_CALC_CAMBIO:
+        case FsmState::S11_CALC_CHANGE:
             if ((uint32_t)(millis() - _motorTimer) >= 5000u) {
-                enterState(FsmState::S2_REPOSO);
+                enterState(FsmState::S2_STANDBY);
             }
             break;
 
-        case FsmState::S12_PANTALLA_FIN: {
+        case FsmState::S13_MESSAGE_PROMPT:
+            if (inactivityExpired()) {
+                enterState(FsmState::S2_STANDBY);
+            }
+            break;
+
+        case FsmState::S12_FINISH_SCREEN: {
             uint8_t numSlides = 1u + _changeSlides;
             unsigned long totalMs = (unsigned long)numSlides * VM_CAROUSEL_INTERVAL_MS + 1000UL;
             if ((uint32_t)(millis() - _inactivityTimer) >= totalMs) {
-                enterState(FsmState::S2_REPOSO);
+                enterState(FsmState::S2_STANDBY);
             }
             break;
         }
@@ -198,52 +199,64 @@ void VmFsm::update() {
 
 void VmFsm::enterState(FsmState next) {
     _state = next;
+    _carousel.clearScreens();
 
     switch (next) {
-        case FsmState::S0_ARRANQUE:      onEnterArranque();              break;
-        case FsmState::S1_FALLA_INTERNA: onEnterFallaInterna();          break;
-        case FsmState::S2_REPOSO:        onEnterReposo();                break;
-        case FsmState::S3_SEL_CANAL:     onEnterSelCanal(_selectedSlot); break;
-        case FsmState::S4_SEL_PAGO:      onEnterSelPago();               break;
-        case FsmState::S5_ESP_EFECTIVO:  onEnterEspEfectivo();           break;
-        case FsmState::S6_ESP_RFID:      onEnterEspRfid();               break;
-        case FsmState::S7_RESERVADA:     onEnterReservada();             break;
-        case FsmState::S8_DISPENSANDO:   onEnterDispensando();           break;
-        case FsmState::S9_CONFIRMADA:    onEnterConfirmada();            break;
-        case FsmState::S10_FALLA_DISP:   onEnterFallaDisp();             break;
-        case FsmState::S11_CALC_CAMBIO:  onEnterCalcCambio();            break;
-        case FsmState::S12_PANTALLA_FIN: onEnterPantallaFin();           break;
+        case FsmState::S0_START:      onEnterStart();              break;
+        case FsmState::S1_INTERNAL_ERROR: onEnterInternalError();          break;
+        case FsmState::S2_STANDBY:        onEnterStandby();                break;
+        case FsmState::S3_SELECT_CHANNEL:     onEnterSelectChannel(_selectedSlot); break;
+        case FsmState::S4_SELECT_PAYMENT:      onEnterSelectPayment();               break;
+        case FsmState::S5_WAIT_CASH:  onEnterWaitCash();           break;
+        case FsmState::S6_WAIT_RFID:      onEnterWaitRfid();               break;
+        case FsmState::S7_PREPARING_VEND:     onEnterPreparingVend();             break;
+        case FsmState::S8_DISPENSING:   onEnterDispensing();           break;
+        case FsmState::S9_CONFIRMED:    onEnterConfirmed();            break;
+        case FsmState::S10_VEND_ERROR:   onEnterVendError();             break;
+        case FsmState::S11_CALC_CHANGE:  onEnterCalcChange();            break;
+        case FsmState::S12_FINISH_SCREEN: onEnterFinishScreen();           break;
+        case FsmState::S13_MESSAGE_PROMPT: onEnterMessagePrompt();          break;
         default: break;
     }
 }
 
-void VmFsm::onEnterArranque() {
+void VmFsm::onEnterStart() {
     display("   Iniciando...    ",
             "   Maquina         ",
             "   Expendedora     ",
             "                   ");
 }
 
-void VmFsm::onEnterFallaInterna() {
+void VmFsm::onEnterInternalError() {
     display("  ERROR INTERNO    ",
             "  EEPROM no disp.  ",
             "  Reinicie o llame ",
             "  al tecnico.      ");
 }
 
-void VmFsm::onEnterReposo() {
+void VmFsm::onEnterStandby() {
     _carousel.clearScreens();
-    _carousel.addScreen(reposoScreenTrampoline); // slots 1 y 2
-    _carousel.addScreen(reposoScreenTrampoline); // slots 3 y 4
+    for (uint8_t i = 0; i < 4; i++) {
+        _carousel.addScreen(reposoScreenTrampoline);
+    }
     _carousel.begin();
     resetInactivityTimer();
 }
 
-void VmFsm::onEnterSelCanal(uint8_t slot) {
+void VmFsm::onEnterSelectChannel(uint8_t slot) {
     _selectedSlot = slot;
 
     if (!_data.getSlot(slot, _slotInfo) || !_slotInfo.enabled) {
-        enterState(FsmState::S2_REPOSO);
+        enterState(FsmState::S2_STANDBY);
+        return;
+    }
+
+    if (_slotInfo.stock == 0) {
+        showMessage("  Producto agotado  ",
+                    "  Seleccione otro   ",
+                    "                    ",
+                    "  [A] Continuar     ",
+                    FsmState::S2_STANDBY);
         return;
     }
 
@@ -261,7 +274,7 @@ void VmFsm::onEnterSelCanal(uint8_t slot) {
     resetInactivityTimer();
 }
 
-void VmFsm::onEnterSelPago() {
+void VmFsm::onEnterSelectPayment() {
     display("  Metodo de pago   ",
             "  [A] Efectivo     ",
             "  [B] Tarjeta RFID ",
@@ -269,14 +282,14 @@ void VmFsm::onEnterSelPago() {
     resetInactivityTimer();
 }
 
-void VmFsm::onEnterEspEfectivo() {
+void VmFsm::onEnterWaitCash() {
     _paymentMethod    = 0u;
     _insertedCentavos = 0u;
     resetInactivityTimer();
-    renderEfectivoScreen();
+    renderCashScreen();
 }
 
-void VmFsm::onEnterEspRfid() {
+void VmFsm::onEnterWaitRfid() {
     _paymentMethod    = 1u;
     _insertedCentavos = 0u;
     resetInactivityTimer();
@@ -293,31 +306,25 @@ void VmFsm::onEnterEspRfid() {
             "  [B] Cancelar     ");
 }
 
-void VmFsm::onEnterReservada() {
+void VmFsm::onEnterPreparingVend() {
     resetInactivityTimer();
     _stockReserved = false;
 
-    if (!_data.reserveStock(_selectedSlot)) {
-        display("  Sin stock         ",
-                "  Seleccione otro   ",
-                "  canal.            ",
-                "                    ");
-        _motorTimer = millis(); // 1.5s antes de volver a reposo
-        return;
-    }
+    // Eliminado: La comprobacion de stock ya se hizo en S3.
+    _data.reserveStock(_selectedSlot);
 
     _stockReserved = true;
 
     if (!_motor.start(_selectedSlot)) {
         _pendingResult = VM_RESULT_REJECTED_BEFORE_MOTION;
-        enterState(FsmState::S10_FALLA_DISP);
+        enterState(FsmState::S10_VEND_ERROR);
         return;
     }
 
-    enterState(FsmState::S8_DISPENSANDO);
+    enterState(FsmState::S8_DISPENSING);
 }
 
-void VmFsm::onEnterDispensando() {
+void VmFsm::onEnterDispensing() {
     _motorTimer = millis();
     display("  Despachando...    ",
             _slotInfo.productName,
@@ -325,7 +332,7 @@ void VmFsm::onEnterDispensando() {
             "                    ");
 }
 
-void VmFsm::onEnterConfirmada() {
+void VmFsm::onEnterConfirmed() {
     _stockReserved = false;
     _motorTimer    = millis();
 
@@ -335,44 +342,35 @@ void VmFsm::onEnterConfirmada() {
             "  producto!         ");
 }
 
-void VmFsm::onEnterFallaDisp() {
+void VmFsm::onEnterVendError() {
     if (_stockReserved) {
         _stockReserved = false;
         _data.releaseStock(_selectedSlot);
     }
 
-    _motorTimer = millis();
-
-    switch (_pendingResult) {
-        case VM_RESULT_REJECTED_BEFORE_MOTION:
-            display("  No se pudo        ",
-                    "  despachar.        ",
-                    "  Reintente.        ",
-                    "                    ");
-            break;
-        case VM_RESULT_UNCERTAIN:
-            display("  Revisa tu         ",
-                    "  producto.         ",
-                    "  El motor giro.    ",
-                    "                    ");
-            break;
-        default:
-            display("  Error de despacho ",
-                    _slotInfo.productName,
-                    "  Intente de nuevo  ",
-                    "                    ");
-            break;
+    // Preparar el reembolso convirtiendo RFID a efectivo (si es necesario) y calculando
+    if (_paymentMethod == 1u) {
+        // Se cobro con RFID, simular que se insertó ese efectivo para devolverlo en monedas.
+        _insertedCentavos = _slotInfo.priceCentavos; 
     }
+    _slotInfo.priceCentavos = 0; // Reembolso total
+
+    // Mostrar mensaje de falla y que se devolverán monedas
+    showMessage("  Falla en proceso  ",
+                "  Devolviendo       ",
+                "  monedas...        ",
+                "  [A] Continuar     ",
+                FsmState::S11_CALC_CHANGE);
 }
 
-void VmFsm::onEnterCalcCambio() {
+void VmFsm::onEnterCalcChange() {
     _motorTimer = millis();
 
     uint32_t cambio = (_insertedCentavos > _slotInfo.priceCentavos)
                           ? (_insertedCentavos - _slotInfo.priceCentavos) : 0u;
 
     if (cambio == 0u) {
-        enterState(FsmState::S12_PANTALLA_FIN);
+        enterState(FsmState::S12_FINISH_SCREEN);
         return;
     }
 
@@ -390,10 +388,10 @@ void VmFsm::onEnterCalcCambio() {
         return;
     }
 
-    enterState(FsmState::S12_PANTALLA_FIN);
+    enterState(FsmState::S12_FINISH_SCREEN);
 }
 
-void VmFsm::onEnterPantallaFin() {
+void VmFsm::onEnterFinishScreen() {
     _carousel.clearScreens();
     _changeSlides = 0;
 
@@ -426,21 +424,23 @@ void VmFsm::onEnterPantallaFin() {
 }
 
 void VmFsm::handleKey(char key) {
-    KeyMode mode = KeyMode::PAGO;
-    if (_state == FsmState::S2_REPOSO)       mode = KeyMode::REPOSO;
-    if (_state == FsmState::S5_ESP_EFECTIVO) mode = KeyMode::EFECTIVO;
+    KeyMode mode = KeyMode::PAYMENT;
+    if (_state == FsmState::S2_STANDBY)       mode = KeyMode::STANDBY;
+    if (_state == FsmState::S13_MESSAGE_PROMPT) mode = KeyMode::PROMPT;
+    if (_state == FsmState::S5_WAIT_CASH) mode = KeyMode::CASH;
 
     KeyAction action = _keypad.interpret(key, mode);
 
     switch (_state) {
-        case FsmState::S2_REPOSO:        processKeyReposo(action);      break;
-        case FsmState::S3_SEL_CANAL:     processKeySelCanal(action);    break;
-        case FsmState::S4_SEL_PAGO:      processKeySelPago(action);     break;
-        case FsmState::S5_ESP_EFECTIVO:  processKeyEspEfectivo(action); break;
-        case FsmState::S6_ESP_RFID:
+        case FsmState::S2_STANDBY:        processKeyStandby(action);      break;
+        case FsmState::S3_SELECT_CHANNEL:     processKeySelectChannel(action);    break;
+        case FsmState::S4_SELECT_PAYMENT:      processKeySelectPayment(action);     break;
+        case FsmState::S5_WAIT_CASH:  processKeyWaitCash(action); break;
+        case FsmState::S13_MESSAGE_PROMPT: processKeyMessagePrompt(action); break;
+        case FsmState::S6_WAIT_RFID:
             if (action == KeyAction::CANCEL_ABORT ||
                 action == KeyAction::CHOOSE_RFID) {
-                enterState(FsmState::S2_REPOSO);
+                enterState(FsmState::S2_STANDBY);
             }
             break;
         default:
@@ -448,43 +448,42 @@ void VmFsm::handleKey(char key) {
     }
 }
 
-void VmFsm::processKeyReposo(KeyAction a) {
+void VmFsm::processKeyStandby(KeyAction a) {
     if (a >= KeyAction::SELECT_1 && a <= KeyAction::SELECT_4) {
         _selectedSlot = (uint8_t)a - (uint8_t)KeyAction::SELECT_1 + 1u;
-        enterState(FsmState::S3_SEL_CANAL);
+        enterState(FsmState::S3_SELECT_CHANNEL);
     }
 }
 
-void VmFsm::processKeySelCanal(KeyAction a) {
+void VmFsm::processKeySelectChannel(KeyAction a) {
     if (a == KeyAction::CHOOSE_CASH) {
-        enterState(FsmState::S4_SEL_PAGO);
+        enterState(FsmState::S4_SELECT_PAYMENT);
     } else if (a == KeyAction::CANCEL_ABORT) {
-        enterState(FsmState::S2_REPOSO);
+        enterState(FsmState::S2_STANDBY);
     }
 }
 
-void VmFsm::processKeySelPago(KeyAction a) {
+void VmFsm::processKeySelectPayment(KeyAction a) {
     if (a == KeyAction::CHOOSE_CASH) {
-        enterState(FsmState::S5_ESP_EFECTIVO);
+        enterState(FsmState::S5_WAIT_CASH);
     } else if (a == KeyAction::CHOOSE_RFID) {
         if (_rfid.isAvailable()) {
-            enterState(FsmState::S6_ESP_RFID);
+            enterState(FsmState::S6_WAIT_RFID);
         } else {
-            display("  RFID no           ",
-                    "  disponible.       ",
-                    "  Use efectivo.     ",
-                    "                    ");
-            delay(2000);
-            onEnterSelPago();
+            showMessage("  RFID no           ",
+                        "  disponible.       ",
+                        "  Use efectivo.     ",
+                        "  [A] Continuar     ",
+                        FsmState::S4_SELECT_PAYMENT);
         }
     } else if (a == KeyAction::CANCEL_ABORT) {
-        enterState(FsmState::S2_REPOSO);
+        enterState(FsmState::S2_STANDBY);
     }
 }
 
-void VmFsm::processKeyEspEfectivo(KeyAction a) {
+void VmFsm::processKeyWaitCash(KeyAction a) {
     if (a == KeyAction::CANCEL_ABORT) {
-        enterState(FsmState::S2_REPOSO);
+        enterState(FsmState::S2_STANDBY);
         return;
     }
 
@@ -498,32 +497,29 @@ void VmFsm::processKeyEspEfectivo(KeyAction a) {
         resetInactivityTimer();
 
         if (_insertedCentavos >= _slotInfo.priceCentavos) {
-            enterState(FsmState::S7_RESERVADA);
+            enterState(FsmState::S7_PREPARING_VEND);
             return;
         }
 
-        renderEfectivoScreen();
+        renderCashScreen();
     }
 }
 
 void VmFsm::buildReposoScreen(uint8_t idx,
                                char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
     memset(lines, 0, LCD_LINE_LEN * LCD_LINE_COUNT);
-    snprintf(lines[0], LCD_LINE_LEN, "  Selecciona canal  ");
-
-    uint8_t start = (idx % 2u) * 2u; // 0 -> slots 1 y 2, 1 -> slots 3 y 4
-    for (uint8_t i = 0; i < 2u; i++) {
-        uint8_t slotNum = start + i + 1u;
-        SlotInfo info;
-        memset(&info, 0, sizeof(info));
-        if (_data.getSlot(slotNum, info)) {
-            char priceBuf[16];
-            formatMoney(info.priceCentavos, priceBuf, sizeof(priceBuf));
-            snprintf(lines[1 + 2 * i], LCD_LINE_LEN,
-                     "%d) %-16s", (int)slotNum, info.productName);
-            snprintf(lines[2 + 2 * i], LCD_LINE_LEN,
-                     "    %s Stock:%lu", priceBuf, (unsigned long)info.stock);
-        }
+    uint8_t slotNum = idx + 1u;
+    SlotInfo info;
+    memset(&info, 0, sizeof(info));
+    
+    if (_data.getSlot(slotNum, info)) {
+        char priceBuf[16];
+        formatMoney(info.priceCentavos, priceBuf, sizeof(priceBuf));
+        
+        snprintf(lines[0], LCD_LINE_LEN, "  Selecciona Canal  ");
+        snprintf(lines[1], LCD_LINE_LEN, "%d) %-16s", (int)slotNum, info.productName);
+        snprintf(lines[2], LCD_LINE_LEN, "  Precio: %-9s", priceBuf);
+        snprintf(lines[3], LCD_LINE_LEN, "  Stock : %-9lu", (unsigned long)info.stock);
     }
 }
 
@@ -572,7 +568,7 @@ void VmFsm::buildChangeScreen(uint8_t idx,
     snprintf(lines[3], LCD_LINE_LEN, "  Recoge tu cambio  ");
 }
 
-void VmFsm::renderEfectivoScreen() {
+void VmFsm::renderCashScreen() {
     uint32_t falta = (_slotInfo.priceCentavos > _insertedCentavos)
                          ? (_slotInfo.priceCentavos - _insertedCentavos) : 0u;
     char moneyBuf[16], faltaBuf[16];
@@ -588,4 +584,23 @@ void VmFsm::renderEfectivoScreen() {
             l2,
             l3,
             " 1=$1 2=$2 3=$5 4=$10");
+}
+void VmFsm::showMessage(const char* l1, const char* l2, const char* l3, const char* l4, FsmState next) {
+    snprintf(_promptLines[0], VM_DISPLAY_LINE_LEN, "%-20s", l1 ? l1 : "");
+    snprintf(_promptLines[1], VM_DISPLAY_LINE_LEN, "%-20s", l2 ? l2 : "");
+    snprintf(_promptLines[2], VM_DISPLAY_LINE_LEN, "%-20s", l3 ? l3 : "");
+    snprintf(_promptLines[3], VM_DISPLAY_LINE_LEN, "%-20s", l4 ? l4 : "");
+    _promptNextState = next;
+    enterState(FsmState::S13_MESSAGE_PROMPT);
+}
+
+void VmFsm::onEnterMessagePrompt() {
+    display(_promptLines[0], _promptLines[1], _promptLines[2], _promptLines[3]);
+    resetInactivityTimer();
+}
+
+void VmFsm::processKeyMessagePrompt(KeyAction a) {
+    if (a == KeyAction::CONTINUE) {
+        enterState(_promptNextState);
+    }
 }

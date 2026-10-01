@@ -41,6 +41,10 @@ Una vez seleccionado el producto, la máquina preguntará cómo deseas pagar.
 - **Tecla `B`**: Elegir pagar con **Tarjeta RFID**.
 - **Tecla `*`**: Cancelar la compra y volver al inicio.
 
+### Pantallas de Mensajes y Alertas
+- **Tecla `A`**: Botón universal de **Continuar** para descartar mensajes de alerta (ej. Producto Agotado o Errores).
+- **Tecla `*`**: Botón universal de **Cancelar / Atrás** en pantallas de espera (ej. Esperando efectivo o RFID).
+
 ---
 
 ## 3. Realizar una Compra
@@ -52,7 +56,7 @@ Una vez seleccionado el producto, la máquina preguntará cómo deseas pagar.
 4. Acerca tu tarjeta MIFARE Classic al lector MFRC522.
 5. El lector descontará el precio exacto directamente del saldo de la tarjeta.
 6. Si tienes saldo suficiente, el producto será despachado inmediatamente.
-7. *(Si deseas cancelar mientras esperas pasar la tarjeta, presiona la tecla **`B`**).*
+7. *(Si deseas cancelar mientras esperas pasar la tarjeta, presiona la tecla **`*`**).*
 
 *Nota Técnica del RFID: La máquina lee y descuenta el saldo del Sector 1, Bloque 4 de la tarjeta usando la clave de fábrica.*
 
@@ -70,4 +74,11 @@ Una vez seleccionado el producto, la máquina preguntará cómo deseas pagar.
    - `8` = $200.00 pesos
    - `9` = $500.00 pesos
 4. Una vez que el saldo insertado alcance o supere el precio del producto, la máquina despachará el producto automáticamente y te calculará tu cambio.
-5. *(Si deseas cancelar e interrumpir la compra antes de completar el monto, presiona la tecla **`B`**).*
+5. *(Si deseas cancelar e interrumpir la compra antes de completar el monto, presiona la tecla **`*`**. La máquina te devolverá las monedas insertadas calculando tu cambio total).*
+
+---
+## 4. Fallos Mecánicos y Reembolsos
+Si el motor intenta girar para despachar el producto pero detecta un problema (atasco o producto atorado), la máquina mostrará una pantalla de "**Falla en proceso. Devolviendo monedas... [A] Continuar**".
+Al presionar la tecla **`A`**:
+- **Si pagaste con efectivo:** La máquina utilizará el algoritmo de cálculo de cambio para devolver físicamente en monedas todo tu saldo introducido.
+- **Si pagaste con RFID:** El monto deducido virtualmente se transformará en monedas físicas y la máquina te regresará el costo del producto en efectivo para evitar que pierdas tu dinero de la tarjeta.
