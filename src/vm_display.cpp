@@ -9,7 +9,7 @@
 
 // Instancia única del LCD (20x4 @ 0x27). La cabecera del driver de
 // marcoschwartz exige cols/rows en el constructor.
-static LiquidCrystal_I2C s_lcd(VM_LCD_ADDR, VM_DISPLAY_LINE_LEN, VM_DISPLAY_LINE_COUNT);
+static LiquidCrystal_I2C s_lcd(VM_LCD_ADDR, VM_LCD_COLS, VM_DISPLAY_LINE_COUNT);
 
 VmDisplay::VmDisplay() {
 }
@@ -29,7 +29,7 @@ void VmDisplay::show(const char* line1, const char* line2,
         s_lcd.setCursor(0, row);
 
         const char* src = lines[row];
-        for (uint8_t col = 0; col < VM_DISPLAY_LINE_LEN; col++) {
+        for (uint8_t col = 0; col < VM_LCD_COLS; col++) {
             char c = ' ';
             if (src != NULL) {
                 c = src[col];

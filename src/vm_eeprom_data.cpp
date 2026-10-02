@@ -19,7 +19,7 @@ enum {
 
 static const uint8_t MAGIC0  = 'S';
 static const uint8_t MAGIC1  = 'A';
-static const uint8_t VERSION = 4u;
+static const uint8_t VERSION = 6u;
 
 typedef struct {
     char     name[16];

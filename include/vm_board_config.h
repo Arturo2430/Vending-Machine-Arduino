@@ -14,9 +14,9 @@
 #define VM_KEYPAD_ROW_1            23u
 #define VM_KEYPAD_ROW_2            24u
 #define VM_KEYPAD_ROW_3            25u
-#define VM_KEYPAD_COL_0            26u
-#define VM_KEYPAD_COL_1            27u
-#define VM_KEYPAD_COL_2            28u
+#define VM_KEYPAD_COL_0            30u
+#define VM_KEYPAD_COL_1            31u
+#define VM_KEYPAD_COL_2            33u
 #define VM_KEYPAD_COL_3            29u
 
 // LCD 20x4 I2C

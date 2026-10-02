@@ -765,7 +765,7 @@ void VmFsm::renderCashScreen() {
     display("  Inserta monedas   ",
             l2,
             l3,
-            " 1=$1 2=$2 3=$5 4=$10");
+            "1=$1 2=$2 3=$5 4=$10");
 }
 
 void VmFsm::showMessage(const char* l1, const char* l2, const char* l3,
