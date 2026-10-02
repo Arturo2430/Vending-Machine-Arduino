@@ -442,8 +442,6 @@ void VmFsm::onEnterCalcChange() {
                      ? (_insertedCentavos - _slotInfo.priceCentavos) : 0u;
     }
 
-    return true;
-}
     if (cambio == 0u) {
         enterState(FsmState::S12_FINISH_SCREEN);
         return;
