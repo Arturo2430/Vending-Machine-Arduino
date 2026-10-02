@@ -49,6 +49,6 @@ uint32_t VmKeypad::coinActionToCentavos(KeyAction action) const {
     if (idx < base || idx > top) {
         return 0u;
     }
-    // Leer Flash explicitamente, incluso si LTO fusiona tablas identicas.
+    // Leer desde PROGMEM el valor correspondiente a la tecla
     return pgm_read_dword(&COIN_VALUES[idx - base]);
 }

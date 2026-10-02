@@ -1,7 +1,4 @@
-/**
- * @file vm_change_calculator.h
- * @brief Cálculo de cambio con denominaciones de la caja de efectivo.
- */
+// Calculo de cambio usando denominaciones de la caja
 
 #ifndef VM_CHANGE_CALCULATOR_H
 #define VM_CHANGE_CALCULATOR_H
@@ -9,6 +6,7 @@
 #include <stdint.h>
 #include "vm_eeprom_data.h"
 
+// Distribucion de monedas para dar cambio
 typedef struct {
     uint32_t coin1000;
     uint32_t coin500;
@@ -16,16 +14,13 @@ typedef struct {
     uint32_t coin100;
 } ChangeResult;
 
+// Calculadora de cambio y reembolsos
 class VmChangeCalculator {
 public:
     VmChangeCalculator();
 
-    /**
-     * Calcula el cambio para `paid - price` usando las monedas de la caja.
-     * Con price = 0 calcula el reembolso de `paid`.
-     * Devuelve true y descuenta las monedas solo si el monto se puede formar;
-     * si no, la caja queda sin cambios.
-     */
+    // Devuelve true si hay monedas suficientes para el cambio (paid - price)
+    // Si price = 0 calcula el reembolso completo
     bool calculate(uint32_t paidCentavos, uint32_t priceCentavos,
                    VmEepromData& cashBox, ChangeResult& result);
 };

@@ -7,7 +7,7 @@
 static_assert(LCD_LINE_LEN >= 21, "LCD_LINE_LEN debe ser >= 21 (20 columnas + nul)");
 static_assert(VM_DISPLAY_LINE_LEN >= 21, "VM_DISPLAY_LINE_LEN debe ser >= 21");
 
-// Puntero estatico para delegar callbacks del carrusel a la instancia FSM
+// Delegacion de callbacks del carrusel a la FSM
 static VmFsm* s_fsm = NULL;
 
 static void reposoScreenTrampoline(uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
@@ -45,9 +45,7 @@ static void setLinef(char* dst, const char* fmt, ...) {
     snprintf(dst, LCD_LINE_LEN, "%-20.20s", tmp);
 }
 
-VmFsm::VmFsm(VmEepromData& data, VmMotorController& motor, VmRfid& rfid,
-             DisplayFn displayFn)
-    : _data(data),
+VmFsm::VmFsm(VmEepromData& data, VmMotorController& motor, VmRfid& rfid, DisplayFn displayFn) : _data(data),
       _motor(motor),
       _rfid(rfid),
       _displayFn(displayFn),
@@ -85,12 +83,11 @@ void VmFsm::begin() {
     enterState(FsmState::S0_START);
 }
 
-void VmFsm::display(const char* l1, const char* l2,
-                    const char* l3, const char* l4) {
+void VmFsm::display(const char* l1, const char* l2, const char* l3, const char* l4) {
     if (_displayFn) _displayFn(l1, l2, l3, l4);
 }
 
-// update(): salidas por tiempo
+// Actualizacion de transiciones por temporizadores
 void VmFsm::update() {
     _motor.poll();
     _carousel.update();
@@ -109,7 +106,7 @@ void VmFsm::update() {
 
         case FsmState::S5_WAIT_CASH:
             if (inactivityExpired()) {
-                // T_inact con monto > 0 -> S15; con monto = 0 -> S2
+                // Si hay saldo ir a reembolso, sino volver a reposo
                 if (_insertedCentavos > 0u) {
                     enterState(FsmState::S15_REFUND_CALC);
                 } else {
@@ -143,7 +140,7 @@ void VmFsm::update() {
                                     FsmState::S2_STANDBY);
                     }
                 } else {
-                    // saldo insuficiente
+                    // Fondos insuficientes en la tarjeta
                     char l2[VM_DISPLAY_LINE_LEN], l3[VM_DISPLAY_LINE_LEN];
                     char priceBuf[16], saldoBuf[16];
                     formatMoney(saldo, saldoBuf, sizeof(saldoBuf));
@@ -165,7 +162,7 @@ void VmFsm::update() {
         }
 
         case FsmState::S7_PREPARING_VEND:
-            // Estado transitorio
+            // Estado intermedio
             break;
 
         case FsmState::S8_DISPENSING:
@@ -218,12 +215,12 @@ void VmFsm::update() {
 
         case FsmState::S14_REFUND_RFID:
         case FsmState::S15_REFUND_CALC:
-            // Estados transitorios
+            // Estados intermedios
             break;
 
         case FsmState::S12_FINISH_SCREEN:
         case FsmState::S16_REFUND_FINISH: {
-            // T_fin = (1 + n) * T_carrusel + 1 s
+            // Esperar a mostrar todas las pantallas de cambio
             uint8_t numSlides = 1u + _changeSlides;
             unsigned long totalMs =
                 (unsigned long)numSlides * VM_CAROUSEL_INTERVAL_MS + 1000UL;
@@ -238,10 +235,13 @@ void VmFsm::update() {
     }
 }
 
-// despacha la accion de entrada
+// Ejecutar acciones de entrada al cambiar de estado
 void VmFsm::enterState(FsmState next) {
     _state = next;
     _carousel.clearScreens();
+    
+    Serial.print(F("Entrando a estado... S"));
+    Serial.println((uint8_t)next);
 
     switch (next) {
         case FsmState::S0_START:           onEnterStart();                      break;
@@ -265,7 +265,7 @@ void VmFsm::enterState(FsmState next) {
     }
 }
 
-// Acciones de entrada
+// Logica de inicializacion de estados
 void VmFsm::onEnterStart() {
     display("   Iniciando...    ",
             "   Maquina         ",
@@ -292,7 +292,7 @@ void VmFsm::onEnterStandby() {
     for (uint8_t i = 0; i < 4; i++) {
         _carousel.addScreen(reposoScreenTrampoline);
     }
-    // Pantalla extra si hay un adeudo pendiente con algun cliente
+    // Mostrar pantalla de deuda si es necesario
     if (_owedCentavos > 0u) {
         _carousel.addScreen(reposoScreenTrampoline);
     }
@@ -401,8 +401,7 @@ void VmFsm::onEnterConfirmed() {
             "  producto!         ");
 }
 
-// S10: libera stock, el monto a devolver es _insertedCentavos (monto pagado)
-// y solo muestra el aviso. El reembolso lo ejecutan S14 (RFID) o S15 (monedas).
+// S10 Liberar inventario y notificar fallo antes de reembolsar
 void VmFsm::onEnterVendError() {
     if (_stockReserved) {
         _stockReserved = false;
@@ -424,7 +423,7 @@ void VmFsm::onEnterVendError() {
     }
 }
 
-// S11: calcula el cambio de una venta en efectivo (insertado - precio)
+// S11 Calcular cambio en venta de efectivo
 void VmFsm::onEnterCalcChange() {
     memset(&_changeResult, 0, sizeof(_changeResult));
 
@@ -457,7 +456,7 @@ void VmFsm::onEnterCalcChange() {
     enterState(FsmState::S12_FINISH_SCREEN);
 }
 
-// S12: "Compra exitosa" + (cobro RFID o monedas de cambio)
+// S12 Mostrar mensaje de exito e imprimir el cambio
 void VmFsm::onEnterFinishScreen() {
     _carousel.clearScreens();
     _changeSlides = 0;
@@ -468,14 +467,14 @@ void VmFsm::onEnterFinishScreen() {
         _carousel.addScreen(finRfidTrampoline);
         _changeSlides = 1;
     } else {
-        addChangeSlides();   // vacio si el cambio es 0
+        addChangeSlides();   // Omitir si no hay cambio
     }
 
     _carousel.begin();
     _inactivityTimer = millis();
 }
 
-// S14: devolver el cobro a la tarjeta (sigue en el lector)
+// S14 Reintegrar cobro a la tarjeta RFID
 void VmFsm::onEnterRefundRfid() {
     memset(&_changeResult, 0, sizeof(_changeResult));
     _changeSlides = 0;
@@ -484,12 +483,12 @@ void VmFsm::onEnterRefundRfid() {
         _rfidBalanceAfter += _insertedCentavos;
         enterState(FsmState::S16_REFUND_FINISH);
     } else {
-        // Escritura falla -> reembolso en monedas
+        // Reembolsar en efectivo si falla la tarjeta
         enterState(FsmState::S15_REFUND_CALC);
     }
 }
 
-// S15: calcular denominaciones del monto a devolver (precio = 0)
+// S15 Calcular denominaciones para reembolso total
 void VmFsm::onEnterRefundCalc() {
     memset(&_changeResult, 0, sizeof(_changeResult));
     _changeSlides = 0;
@@ -504,7 +503,7 @@ void VmFsm::onEnterRefundCalc() {
         return;
     }
 
-    // M5: sin monedas para reembolso -> se registra el adeudo
+    // M5 Registrar adeudo por falta de monedas
     _owedCentavos += _insertedCentavos;
     memset(&_changeResult, 0, sizeof(_changeResult));
 
@@ -519,21 +518,19 @@ void VmFsm::onEnterRefundCalc() {
                 FsmState::S2_STANDBY);
 }
 
-// S16: "Operacion cancelada" + (saldo devuelto o monedas)
-// Si _changeResult trae monedas -> reembolso en monedas; si no -> a tarjeta.
+// S16 Confirmar cancelacion y proceder al reembolso
 void VmFsm::onEnterRefundFinish() {
     _carousel.clearScreens();
     _changeSlides = 0;
 
     _carousel.addScreen(finRefundTrampoline);
-    addChangeSlides();   // agrega una pantalla por denominacion (si hay monedas)
+    addChangeSlides();   // Pantalla extra por cada moneda devuelta
 
     _carousel.begin();
     _inactivityTimer = millis();
 }
 
-// Llena _changeDenoms/_changeQtys/_changeSlides desde _changeResult y agrega
-// una pantalla del carrusel por cada denominacion con cantidad > 0.
+// Configurar pantallas de cambio segun denominaciones calculadas
 void VmFsm::addChangeSlides() {
     const uint32_t denoms[4] = {1000u, 500u, 200u, 100u};
     const uint32_t qtys[4]   = {
@@ -554,7 +551,7 @@ void VmFsm::addChangeSlides() {
     }
 }
 
-// Teclado
+// Procesamiento de entrada del teclado
 void VmFsm::handleKey(char key) {
     KeyMode mode = KeyMode::PAYMENT;
     if (_state == FsmState::S2_STANDBY)         mode = KeyMode::STANDBY;
@@ -563,7 +560,7 @@ void VmFsm::handleKey(char key) {
 
     KeyAction action = _keypad.interpret(key, mode);
 
-    // Permite verificar la tecla recibida y el estado que la interpreta.
+    // Depuracion de la tecla presionada
     Serial.print(F("KEY="));
     Serial.print(key);
     Serial.print(F(" STATE=S"));
@@ -610,7 +607,7 @@ void VmFsm::processKeySelectPayment(KeyAction a) {
         if (_rfid.isAvailable()) {
             enterState(FsmState::S6_WAIT_RFID);
         } else {
-            // M2: RFID no disponible, [A] regresa a S4
+            // M2 Notificar modulo RFID no disponible
             showMessage("  RFID no           ",
                         "  disponible.       ",
                         "  Use efectivo.     ",
@@ -624,7 +621,7 @@ void VmFsm::processKeySelectPayment(KeyAction a) {
 
 void VmFsm::processKeyWaitCash(KeyAction a) {
     if (a == KeyAction::CANCEL_ABORT) {
-        // [*] con monto > 0 -> S15; con monto = 0 -> S2
+        // Cancelar e iniciar reembolso si aplica
         if (_insertedCentavos > 0u) {
             enterState(FsmState::S15_REFUND_CALC);
         } else {
@@ -637,7 +634,7 @@ void VmFsm::processKeyWaitCash(KeyAction a) {
         uint32_t denom = _keypad.coinActionToCentavos(a);
         if (denom == 0u) return;
 
-        // La moneda solo se acepta si la caja la puede registrar
+        // Solo aceptar la moneda si la caja la reconoce
         if (!_data.addCoins(denom, 1u)) {
             Serial.print(F("COIN_REJECTED CENTAVOS="));
             Serial.println(denom);
@@ -668,9 +665,8 @@ void VmFsm::processKeyMessagePrompt(KeyAction a) {
     }
 }
 
-// Constructores de pantallas del carrusel
-void VmFsm::buildReposoScreen(uint8_t idx,
-                              char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
+// Rutinas de dibujo para el LCD
+void VmFsm::buildReposoScreen(uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
     memset(lines, 0, LCD_LINE_LEN * LCD_LINE_COUNT);
 
     if (idx >= 4u) {
@@ -698,8 +694,7 @@ void VmFsm::buildReposoScreen(uint8_t idx,
     }
 }
 
-void VmFsm::buildFinSuccessScreen(uint8_t /*idx*/,
-                                  char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
+void VmFsm::buildFinSuccessScreen(uint8_t /*idx*/, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
     memset(lines, 0, LCD_LINE_LEN * LCD_LINE_COUNT);
     setLinef(lines[0], "  Compra Exitosa!");
     setLinef(lines[1], "  %s", _slotInfo.productName);
@@ -707,8 +702,7 @@ void VmFsm::buildFinSuccessScreen(uint8_t /*idx*/,
     setLinef(lines[3], "  producto!");
 }
 
-void VmFsm::buildFinRfidScreen(uint8_t /*idx*/,
-                               char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
+void VmFsm::buildFinRfidScreen(uint8_t /*idx*/, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
     memset(lines, 0, LCD_LINE_LEN * LCD_LINE_COUNT);
     char priceBuf[16], saldoBuf[16];
     formatMoney(_slotInfo.priceCentavos, priceBuf, sizeof(priceBuf));
@@ -719,34 +713,31 @@ void VmFsm::buildFinRfidScreen(uint8_t /*idx*/,
     setLinef(lines[3], "  Gracias!");
 }
 
-// Pantalla 0 de S16. Reembolso en monedas si _changeSlides > 0
-// (S15 dejo denominaciones); en caso contrario fue a la tarjeta (S14).
-void VmFsm::buildFinRefundScreen(uint8_t /*idx*/,
-                                 char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
+// Armar pantalla principal de reembolso
+void VmFsm::buildFinRefundScreen(uint8_t /*idx*/, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
     memset(lines, 0, LCD_LINE_LEN * LCD_LINE_COUNT);
     setLinef(lines[0], " Operacion cancelada");
 
-    if (_changeSlides > 0u) {              // reembolso en monedas
+    if (_changeSlides > 0u) {              // Mensaje de reembolso en efectivo
         char amount[16];
         formatMoney(_insertedCentavos, amount, sizeof(amount));
         setLinef(lines[1], " Reembolso: %s", amount);
         setLinef(lines[2], " Recoge tus monedas");
-    } else if (_paymentMethod == 1u) {     // reembolso a tarjeta RFID
+    } else if (_paymentMethod == 1u) {     // Mensaje de saldo devuelto a tarjeta
         char saldoBuf[16];
         formatMoney(_rfidBalanceAfter, saldoBuf, sizeof(saldoBuf));
         setLinef(lines[1], " Saldo devuelto");
         setLinef(lines[2], " Saldo: %s", saldoBuf);
-    } else {                               // nada que devolver
+    } else {                               // Sin monto a devolver
         setLinef(lines[1], " Sin cargo");
     }
     setLinef(lines[3], "  Disculpe la falla");
 }
 
-void VmFsm::buildChangeScreen(uint8_t idx,
-                              char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
+void VmFsm::buildChangeScreen(uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]) {
     memset(lines, 0, LCD_LINE_COUNT * LCD_LINE_LEN);
 
-    // idx=1 es la primera slide de cambio (idx=0 es exito / cancelacion)
+    // Ignorar la pantalla cero (exito/cancel)
     uint8_t denomIdx = (idx > 0u) ? (idx - 1u) : 0u;
     if (denomIdx >= _changeSlides) return;
 
@@ -756,7 +747,7 @@ void VmFsm::buildChangeScreen(uint8_t idx,
     char denomBuf[16];
     formatMoney(denom, denomBuf, sizeof(denomBuf));
 
-    // Sin bandera: el estado actual indica si es reembolso (S16) o cambio (S12)
+    // Ajustar el titulo dependiendo de si es cambio o reembolso
     bool esReembolso = (_state == FsmState::S16_REFUND_FINISH);
 
     setLinef(lines[0], esReembolso ? "  Tu reembolso:" : "  Tu cambio:");
@@ -766,9 +757,7 @@ void VmFsm::buildChangeScreen(uint8_t idx,
     setLinef(lines[3], "  Recoge tu dinero");
 }
 
-// ===========================================================================
-// Utilidades de pantalla
-// ===========================================================================
+// Funciones utilitarias para el LCD
 void VmFsm::renderCashScreen(const char* title) {
     uint32_t falta = (_slotInfo.priceCentavos > _insertedCentavos)
                          ? (_slotInfo.priceCentavos - _insertedCentavos) : 0u;
@@ -787,8 +776,7 @@ void VmFsm::renderCashScreen(const char* title) {
             "1=$1 2=$2 3=$5 4=$10");
 }
 
-void VmFsm::showMessage(const char* l1, const char* l2, const char* l3,
-                        const char* l4, FsmState next) {
+void VmFsm::showMessage(const char* l1, const char* l2, const char* l3, const char* l4, FsmState next) {
     snprintf(_promptLines[0], VM_DISPLAY_LINE_LEN, "%-20.20s", l1 ? l1 : "");
     snprintf(_promptLines[1], VM_DISPLAY_LINE_LEN, "%-20.20s", l2 ? l2 : "");
     snprintf(_promptLines[2], VM_DISPLAY_LINE_LEN, "%-20.20s", l3 ? l3 : "");

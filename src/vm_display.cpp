@@ -1,14 +1,10 @@
-/**
- * @file vm_display.cpp
- * @brief Implementación del LCD 20x4 I2C (marcoschwartz/LiquidCrystal_I2C).
- */
+// Implementacion de pantalla LCD 20x4 via I2C
 
 #include <Arduino.h>
 #include <LiquidCrystal_I2C.h>
 #include "vm_display.h"
 
-// Instancia única del LCD (20x4 @ 0x27). La cabecera del driver de
-// marcoschwartz exige cols/rows en el constructor.
+// Instancia global del controlador de pantalla
 static LiquidCrystal_I2C s_lcd(VM_LCD_ADDR, VM_LCD_COLS, VM_DISPLAY_LINE_COUNT);
 
 VmDisplay::VmDisplay() {
@@ -19,8 +15,7 @@ void VmDisplay::begin() {
     s_lcd.backlight();
 }
 
-void VmDisplay::show(const char* line1, const char* line2,
-                     const char* line3, const char* line4) {
+void VmDisplay::show(const char* line1, const char* line2, const char* line3, const char* line4) {
     const char* lines[VM_DISPLAY_LINE_COUNT] = { line1, line2, line3, line4 };
 
     s_lcd.clear();
@@ -34,10 +29,10 @@ void VmDisplay::show(const char* line1, const char* line2,
             if (src != NULL) {
                 c = src[col];
                 if (c == '\0') {
-                    src = NULL;   // rellena el resto con espacios
+                    src = NULL;   // Rellenar con espacios al terminar la cadena
                     c = ' ';
                 } else if ((c < 0x20) || (c > 0x7E)) {
-                    c = ' ';      // caracteres no imprimibles -> espacio
+                    c = ' ';      // Limpiar caracteres no imprimibles
                 }
             }
             s_lcd.write((uint8_t)c);

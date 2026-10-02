@@ -14,8 +14,8 @@ static VmEepromData      storage;
 static VmMotorController motor;
 static VmRfid            rfid;
 
-static void onDisplay(const char* l1, const char* l2,
-                      const char* l3, const char* l4) {
+// Puente de impresion hacia la pantalla
+static void onDisplay(const char* l1, const char* l2, const char* l3, const char* l4) {
     display.show(l1, l2, l3, l4);
 }
 
@@ -36,16 +36,14 @@ static byte keypadColPins[VM_KEYPAD_COLS] = {
     VM_KEYPAD_COL_0, VM_KEYPAD_COL_1, VM_KEYPAD_COL_2, VM_KEYPAD_COL_3
 };
 
-static Keypad keypad(makeKeymap(keypadMap),
-                     keypadRowPins,
-                     keypadColPins,
-                     VM_KEYPAD_ROWS,
-                     VM_KEYPAD_COLS);
+// Instancia global del teclado matricial
+static Keypad keypad(makeKeymap(keypadMap), keypadRowPins, keypadColPins, VM_KEYPAD_ROWS, VM_KEYPAD_COLS);
 
 void setup() {
     Serial.begin(115200);
 
-    Wire.begin(); // Iniciar I2C antes de LCD y PCA9685
+    // Iniciar I2C antes que sus modulos esclavos
+    Wire.begin();
 
     pinMode(VM_PIN_BARRIER, INPUT_PULLUP);
 
@@ -60,7 +58,7 @@ void setup() {
 void loop() {
     if (keypad.getKeys()) {
         for (uint8_t i = 0; i < LIST_MAX; i++) {
-            // Contar solo nuevas pulsaciones, aunque otra tecla siga activa.
+            // Procesar unicamente transiciones a pulsado
             if (keypad.key[i].stateChanged && keypad.key[i].kstate == PRESSED) {
                 fsm.handleKey(keypad.key[i].kchar);
             }

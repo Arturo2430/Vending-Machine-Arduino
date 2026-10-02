@@ -1,8 +1,4 @@
-/**
- * @file vm_rfid.cpp
- * @brief Implementación del driver RFID no bloqueante con lectura/escritura
- *        de saldo en tarjetas MIFARE Classic (sector 1, bloque 4).
- */
+// Lector RFID no bloqueante para tarjetas MIFARE Classic
 
 #include "vm_rfid.h"
 #include <SPI.h>
@@ -14,7 +10,6 @@ VmRfid::VmRfid()
       _cooldownUntilMs(0u),
       _balance(0u) {
     memset(_uidHex, 0, sizeof(_uidHex));
-    // Clave por defecto de fábrica: FF FF FF FF FF FF
     for (uint8_t i = 0; i < 6; i++) {
         _key.keyByte[i] = 0xFF;
     }
@@ -46,7 +41,7 @@ RfidReadResult VmRfid::poll() {
         return RfidReadResult::NONE;
     }
 
-    // Detección no bloqueante.
+    // Deteccion no bloqueante.
     if (!_mfrc.PICC_IsNewCardPresent()) return RfidReadResult::NONE;
     if (!_mfrc.PICC_ReadCardSerial())   return RfidReadResult::NONE;
 

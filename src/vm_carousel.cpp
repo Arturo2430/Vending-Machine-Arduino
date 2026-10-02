@@ -12,12 +12,11 @@ VmCarousel::VmCarousel(VmCarouselCallback callback)
 
 void VmCarousel::begin() {
     _currentIndex = 0;
-    // Forzar visualizacion inmediata en el primer update()
+    // Forzar redibujado en el primer ciclo
     _lastSwitchMs = (unsigned long)(millis() - VM_CAROUSEL_INTERVAL_MS);
 }
 
-void VmCarousel::addScreen(void (*buildFn)(uint8_t index,
-                                           char lines[LCD_LINE_COUNT][LCD_LINE_LEN])) {
+void VmCarousel::addScreen(void (*buildFn)(uint8_t index, char lines[LCD_LINE_COUNT][LCD_LINE_LEN])) {
     if (_numScreens >= CAROUSEL_MAX_SLIDES) return;
     _screens[_numScreens] = buildFn;
     _numScreens++;
@@ -31,6 +30,7 @@ void VmCarousel::clearScreens() {
 void VmCarousel::update() {
     if (_callback == NULL || _numScreens == 0) return;
 
+    // Cambiar de pantalla si expiro el intervalo
     if ((uint32_t)(millis() - _lastSwitchMs) >= VM_CAROUSEL_INTERVAL_MS) {
         _lastSwitchMs = millis();
 
