@@ -1,24 +1,58 @@
 /**
  * @file vm_change_calculator.cpp
- * @brief Cálculo de cambio con algoritmo voraz (greedy) descendente.
+ * @brief Calculo de cambio o reembolso con las monedas de la caja.
  */
 
 #include <Arduino.h>
 #include "vm_change_calculator.h"
 
+static const uint8_t  DENOM_COUNT = 4;
+static const uint32_t DENOMS[DENOM_COUNT] = { 1000u, 500u, 200u, 100u };
+
+// Busca cuantas monedas usar de cada denominacion (mayor a menor) para
+// sumar exactamente `total`. Prueba primero la mayor cantidad posible y
+// retrocede si el resto no se puede completar con las monedas restantes.
+static bool findCoins(uint32_t total, uint8_t idx,
+                      const uint32_t avail[DENOM_COUNT],
+                      uint32_t use[DENOM_COUNT]) {
+    uint32_t denom = DENOMS[idx];
+
+    // Ultima denominacion: debe cubrir el resto exacto
+    if (idx == DENOM_COUNT - 1u) {
+        if ((total % denom) != 0u || (total / denom) > avail[idx]) {
+            return false;
+        }
+        use[idx] = total / denom;
+        return true;
+    }
+
+    uint32_t qty = total / denom;
+    if (qty > avail[idx]) qty = avail[idx];
+
+    for (;;) {
+        use[idx] = qty;
+        if (findCoins(total - qty * denom, idx + 1u, avail, use)) {
+            return true;
+        }
+        if (qty == 0u) return false;
+        qty--;
+    }
+}
+
 VmChangeCalculator::VmChangeCalculator() {
 }
 
+// Con priceCentavos = 0 se calcula un reembolso del monto pagado.
 bool VmChangeCalculator::calculate(uint32_t paidCentavos,
                                    uint32_t priceCentavos,
                                    VmEepromData& cashBox,
                                    ChangeResult& result) {
     result.coin1000 = 0;
-    result.coin500 = 0;
-    result.coin200 = 0;
-    result.coin100 = 0;
+    result.coin500  = 0;
+    result.coin200  = 0;
+    result.coin100  = 0;
 
-    if (priceCentavos == 0u || paidCentavos < priceCentavos) {
+    if (paidCentavos < priceCentavos) {
         return false;
     }
 
@@ -27,35 +61,32 @@ bool VmChangeCalculator::calculate(uint32_t paidCentavos,
         return true;
     }
 
-    const uint32_t denominations[4] = { 1000u, 500u, 200u, 100u };
-    uint32_t* counters[4] = { &result.coin1000, &result.coin500,
-                              &result.coin200, &result.coin100 };
-
-    for (uint8_t i = 0; i < 4 && total > 0u; i++) {
-        uint32_t available = 0;
-        if (!cashBox.getCoinStock(denominations[i], available)) {
-            available = 0;
+    uint32_t avail[DENOM_COUNT];
+    uint32_t use[DENOM_COUNT];
+    for (uint8_t i = 0; i < DENOM_COUNT; i++) {
+        if (!cashBox.getCoinStock(DENOMS[i], avail[i])) {
+            avail[i] = 0u;
         }
-
-        uint32_t use = 0;
-        while (use < available && total >= denominations[i]) {
-            total -= denominations[i];
-            use++;
-        }
-
-        if (use > 0u) {
-            if (!cashBox.deductCoins(denominations[i], use)) {
-                Serial.println(F("CHANGE_ERROR_CANT_DEDUCT"));
-                return false;
-            }
-            *counters[i] = use;
-        }
+        use[i] = 0u;
     }
 
-    if (total > 0u) {
+    // Primero se verifica que se pueda formar el monto; asi la caja no se
+    // modifica si el cambio no es posible.
+    if (!findCoins(total, 0u, avail, use)) {
         Serial.println(F("CHANGE_ERROR_CALC_NOT_POSSIBLE"));
         return false;
     }
 
+    for (uint8_t i = 0; i < DENOM_COUNT; i++) {
+        if (use[i] > 0u && !cashBox.deductCoins(DENOMS[i], use[i])) {
+            Serial.println(F("CHANGE_ERROR_CANT_DEDUCT"));
+            return false;
+        }
+    }
+
+    result.coin1000 = use[0];
+    result.coin500  = use[1];
+    result.coin200  = use[2];
+    result.coin100  = use[3];
     return true;
 }

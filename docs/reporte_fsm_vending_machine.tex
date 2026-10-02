@@ -12,6 +12,7 @@
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{array}
+\usepackage{longtable}
 \usepackage{xcolor}
 \usepackage{listings}
 \usepackage{float}
@@ -88,7 +89,7 @@ sobre un \emph{super-loop} no bloqueante.
 
 Los periféricos que gestiona el sistema son:
 \begin{itemize}
-    \item \textbf{Teclado matricial 4×4} (D22–D29) — entrada del usuario.
+    \item \textbf{Teclado matricial 4×4} (filas D22–D25, columnas D30, D31, D33 y D29) — entrada del usuario.
     \item \textbf{LCD 20×4 I$^2$C} (0x27) — retroalimentación visual.
     \item \textbf{Motores DC} vía PCA9685 (I$^2$C) — despacho de producto.
     \item \textbf{Lector RFID MFRC522} (SPI: D53, D8) — pago con tarjeta.
@@ -207,13 +208,13 @@ if ((uint32_t)(millis() - _motorTimer) >= VM_TIMEOUT_MOTOR_MS)
 \toprule
 \textbf{Clase} & \textbf{Responsabilidad} \\
 \midrule
-\texttt{VmEepromData}      & Persistencia de slots (nombre, precio, stock) y caja de efectivo. \\
+\texttt{VmEepromData}      & Persistencia de slots (nombre, precio, stock) y caja de efectivo; valida los datos al arrancar y los reinicializa si no son v\'alidos. \\
 \texttt{VmMotorController} & Controla motores DC vía PCA9685; detecta entrega mediante barrera óptica (D2). \\
-\texttt{VmRfid}            & Lectura de tarjetas MIFARE y escritura del saldo tras el cobro. \\
+\texttt{VmRfid}            & Lectura de tarjetas MIFARE, cobro del saldo y devoluci\'on del saldo (reselecciona la tarjeta y verifica su UID). \\
 \texttt{VmKeypad}          & Interpreta caracteres del teclado 4×4 en acciones semánticas según el contexto. \\
 \texttt{VmDisplay}         & Abstracción del LCD 20×4 I$^2$C; recibe 4 cadenas de texto. \\
 \texttt{VmCarousel}        & Rota subpantallas cada 2\,s llamando al callback de display. \\
-\texttt{VmChangeCalculator}& Algoritmo voraz de cálculo de cambio sobre las monedas de la caja. \\
+\texttt{VmChangeCalculator}& Cálculo de cambio y reembolso sobre las monedas de la caja (voraz con retroceso). \\
 \bottomrule
 \end{tabular}
 \caption{Módulos del firmware y sus responsabilidades}
@@ -234,31 +235,39 @@ El sistema maneja cuatro denominaciones de moneda mexicana (máximo \$10):
 En el teclado, la correspondencia es: \texttt{1}=\$1, \texttt{2}=\$2,
 \texttt{3}=\$5, \texttt{4}=\$10. Las teclas 5–9 se ignoran.
 
-\subsection{Algoritmo Greedy Decreciente}
+\subsection{Algoritmo Voraz con Retroceso}
 
-El cambio se calcula con un \textbf{algoritmo voraz}: se intentan primero
-las monedas de mayor denominación, reduciendo el monto restante hasta
-completarlo o agotar existencias.
+\texttt{calculate(pagado, precio, caja, resultado)} obtiene el monto
+\texttt{pagado - precio}. Con \texttt{precio = 0} calcula el reembolso de lo
+pagado (S15). El algoritmo prueba primero la mayor cantidad posible de la
+moneda más grande y, si el resto no se puede completar con las monedas
+restantes, retrocede y usa una pieza menos. Así se encuentra una solución
+cada vez que existe (por ejemplo, \$6 con una moneda de \$5, sin monedas de
+\$1 y tres de \$2 se devuelve como $3\times\$2$).
 
-\begin{lstlisting}[style=cpp, caption={Núcleo del algoritmo greedy en VmChangeCalculator::calculate()}]
-const uint32_t denominaciones[4] = { 1000u, 500u, 200u, 100u };
-
-for (uint8_t i = 0; i < 4 && total > 0u; i++) {
-    uint32_t disponible = 0;
-    cashBox.getCoinStock(denominaciones[i], disponible);
-
-    uint32_t usar = 0;
-    while (usar < disponible && total >= denominaciones[i]) {
-        total -= denominaciones[i];
-        usar++;
+\begin{lstlisting}[style=cpp, caption={Búsqueda de monedas en VmChangeCalculator}]
+static bool findCoins(uint32_t total, uint8_t idx,
+                      const uint32_t avail[4], uint32_t use[4]) {
+    uint32_t denom = DENOMS[idx];
+    if (idx == 3) {                       // ultima: resto exacto
+        if (total % denom != 0 || total / denom > avail[idx]) return false;
+        use[idx] = total / denom;
+        return true;
     }
-    if (usar > 0u) {
-        cashBox.deductCoins(denominaciones[i], usar);
-        *contadores[i] = usar;
+    uint32_t qty = min(total / denom, avail[idx]);
+    for (;;) {
+        use[idx] = qty;
+        if (findCoins(total - qty * denom, idx + 1, avail, use)) return true;
+        if (qty == 0) return false;
+        qty--;
     }
 }
-if (total > 0u) return false;  // cambio no realizable
 \end{lstlisting}
+
+La caja \textbf{solo se modifica si el monto se puede formar}: primero se
+verifica con \texttt{findCoins()} y después se llama a \texttt{deductCoins()}
+por cada denominación usada. Si no es posible, devuelve \texttt{false} y la
+caja queda intacta.
 
 \subsection{Visualización del Cambio en Carrusel}
 
@@ -288,7 +297,8 @@ Ejemplo: si el cambio es \$7.00, el carrusel muestra tres slides:
 \begin{itemize}
     \item \textbf{Aritmética entera en centavos}: sin errores de coma flotante en AVR de 8~bits.
     \item \textbf{Descuento inmediato en EEPROM}: cada \texttt{deductCoins()} persiste al instante.
-    \item \textbf{Retorno \texttt{false} si no hay fondos}: mensaje 5~s y regreso a reposo.
+    \item \textbf{Retorno \texttt{false} si no hay monedas}: la FSM registra el monto como adeudo y muestra un mensaje (S13) hasta que el usuario pulsa [A].
+    \item \textbf{Monedas insertadas}: cada moneda de S5 se suma a la caja al momento de insertarse; por eso el reembolso se puede formar con ellas.
 \end{itemize}
 
 % ===========================================================================
@@ -307,12 +317,12 @@ Ejemplo: si el cambio es \$7.00, el carrusel muestra tres slides:
 \midrule
 $S_0$  & \texttt{S0\_START}      & Inicialización; muestra mensaje de bienvenida. & → $S_2$ inmediatamente. \\
 $S_1$  & \texttt{S1\_INTERNAL\_ERROR}& Error crítico de EEPROM; sistema detenido.     & Estado terminal. \\
-$S_2$  & \texttt{S2\_STANDBY}        & Carrusel del catálogo (2 slides de 2 productos). & → $S_3$ (tecla 1–4). \\
+$S_2$  & \texttt{S2\_STANDBY}        & Carrusel del catálogo (una pantalla por producto). & → $S_3$ (tecla 1–4). \\
 $S_3$  & \texttt{S3\_SELECT\_CHANNEL}    & Confirmar producto elegido.  & → $S_4$ [A] / $S_2$ [*] / timeout. \\
 $S_4$  & \texttt{S4\_SELECT\_PAYMENT}     & Elegir método: efectivo o RFID. & → $S_5$ [A] / $S_6$ [B] / $S_2$ [*]. \\
-$S_5$  & \texttt{S5\_WAIT\_CASH} & Acumular monedas (teclas 1–4: \$1/\$2/\$5/\$10). & → $S_7$ (monto $\geq$ precio) / $S_{15}$ ([B]/timeout) / $S_2$. \\
-$S_6$  & \texttt{S6\_WAIT\_RFID}     & Sondear RFID y cobrar saldo. & → $S_7$ (OK) / $S_2$ (error/timeout/[B]). \\
-$S_7$  & \texttt{S7\_PREPARING\_VEND}     & Reservar stock y arrancar motor. & → $S_8$ (OK) / $S_{10}$ (motor falló) / $S_2$ (sin stock, 1.5\,s). \\
+$S_5$  & \texttt{S5\_WAIT\_CASH} & Acumular monedas (teclas 1–4: \$1/\$2/\$5/\$10). & → $S_7$ (monto $\geq$ precio) / $S_{15}$ ([*]/timeout, monto $>0$) / $S_2$ ([*]/timeout, monto $=0$). \\
+$S_6$  & \texttt{S6\_WAIT\_RFID}     & Sondear RFID y cobrar saldo. & → $S_7$ (OK) / $S_{13}$ (error de lectura o saldo) / $S_2$ ([B], [*] o timeout). \\
+$S_7$  & \texttt{S7\_PREPARING\_VEND}     & Reservar stock y arrancar motor. & → $S_8$ (OK) / $S_{10}$ (sin stock o motor rechazó el arranque). \\
 $S_8$  & \texttt{S8\_DISPENSING}   & Motor activo; esperar barrera óptica.  & → $S_9$ (barrera OK) / $S_{10}$ (timeout 10\,s). \\
 $S_9$  & \texttt{S9\_CONFIRMED}    & Entrega confirmada; esperar 1\,s. & → $S_{11}$ (efectivo) / $S_{12}$ (RFID). \\
 $S_{10}$& \texttt{S10\_VEND\_ERROR} & Rollback de stock; mensaje de error 2.5\,s. & → $S_{14}$ (RFID) / $S_{15}$ (efectivo). \\
@@ -330,13 +340,16 @@ $S_{16}$& \texttt{S16\_REFUND\_FINISH} & Carrusel: operación cancelada + detall
 \subsection{Descripción Detallada de Cada Estado}
 
 \paragraph{$S_0$ — Arranque.} Muestra mensaje de bienvenida; en el primer
-ciclo de \texttt{update()} transita a $S_2$.
+ciclo de \texttt{update()} transita a $S_2$. Antes, \texttt{VmEepromData::begin()}
+carga la EEPROM y la valida (denominaciones de la caja, precios, stock y
+capacidad); si no hay datos válidos o cambió la versión, se reinicializa con
+los datos semilla.
 
 \paragraph{$S_1$ — Falla Interna.} Estado terminal por error de EEPROM.
 Requiere reinicio físico del sistema.
 
-\paragraph{$S_2$ — Reposo.} Carrusel con dos slides: el primero muestra
-los productos 1 y 2; el segundo, los productos 3 y 4 (cada 2\,s).
+\paragraph{$S_2$ — Reposo.} Carrusel con una pantalla por producto (canales
+1 a 4, cada 2\,s) y una quinta pantalla de adeudo si hay un adeudo pendiente.
 
 \paragraph{$S_3$ — Selección de Canal.} Consulta \texttt{getSlot()} para
 verificar que el slot está habilitado. Muestra nombre y precio del producto.
@@ -345,9 +358,12 @@ verificar que el slot está habilitado. Muestra nombre y precio del producto.
 Si RFID no está disponible, vuelve a esta pantalla con un aviso.
 
 \paragraph{$S_5$ — Espera de Efectivo.} Teclas 1–4 representan monedas de
-\$1, \$2, \$5 y \$10. Cada pulsación llama a \texttt{addCoins()} y actualiza
-el acumulado. Al cubrir el precio transita automáticamente a $S_7$.
-La pantalla muestra lo insertado, lo que falta y las teclas válidas.
+\$1, \$2, \$5 y \$10. Cada pulsación llama a \texttt{addCoins()}; si la caja
+la registra, se actualiza el acumulado (si la caja está llena, la moneda se
+rechaza). Al cubrir el precio transita automáticamente a $S_7$. La tecla
+\texttt{*} (o la inactividad) cancela: con monto mayor a cero pasa a $S_{15}$
+para devolver las monedas. La pantalla muestra lo insertado, lo que falta y
+las teclas válidas.
 
 \paragraph{$S_6$ — Espera de RFID.} \texttt{VmRfid::poll()} se llama en cada
 ciclo sin bloquear. Saldo suficiente → \texttt{deductBalance()} → $S_7$.
@@ -367,12 +383,14 @@ si el pago fue en efectivo, avanza a $S_{11}$; si fue RFID (sin cambio), a $S_{1
 
 \paragraph{$S_{10}$ — Falla de Despacho.} Si \texttt{\_stockReserved} es
 \texttt{true}, llama a \texttt{releaseStock()} para devolver la unidad al
-inventario. Muestra mensaje de error 3\,s y retorna a $S_2$.
+inventario. Muestra el aviso de falla 2.5\,s y pasa al reembolso: $S_{14}$ si
+se pagó con RFID o $S_{15}$ si se pagó en efectivo.
 
 \paragraph{$S_{11}$ — Cálculo de Cambio.} Invoca
-\texttt{VmChangeCalculator::calculate()}. En caso de éxito, construye los
-arrays \texttt{\_changeDenoms[]} y \texttt{\_changeQtys[]} para el carrusel.
-Si no hay fondos suficientes, muestra aviso y espera 5\,s antes de volver a $S_2$.
+\texttt{VmChangeCalculator::calculate()} con el monto insertado y el precio.
+En caso de éxito, $S_{12}$ construye los arrays \texttt{\_changeDenoms[]} y
+\texttt{\_changeQtys[]} para el carrusel. Si no hay monedas suficientes,
+registra el adeudo y muestra un aviso en $S_{13}$ que espera la tecla [A].
 
 \paragraph{$S_{12}$ — Pantalla Final.} El carrusel muestra: slide de éxito,
 seguido de un slide por cada denominación no nula (de \$10 a \$1) o el
@@ -382,9 +400,9 @@ resumen de cobro RFID. Regresa a $S_2$ al completar todos los slides + 1\,s.
 mensajes al usuario y esperar la confirmación. Transita al estado destino configurado
 tras pulsar la tecla \texttt{A}.
 
-\paragraph{$S_{14}$ — Reembolso a Tarjeta RFID.} Intenta devolver el monto cobrado a la tarjeta RFID tras un fallo de motor o cancelación. Si la escritura es exitosa, transita a $S_{16}$; si falla, pasa a $S_{15}$ como contingencia.
+\paragraph{$S_{14}$ — Reembolso a Tarjeta RFID.} Intenta devolver el monto cobrado a la tarjeta RFID tras un fallo de despacho. Como el cobro dejó la tarjeta en estado HALT, \texttt{creditBalance()} la vuelve a seleccionar (\texttt{PICC\_WakeupA}) y verifica que su UID sea el mismo antes de escribir; por eso la tarjeta debe seguir sobre el lector. Si la escritura es exitosa, transita a $S_{16}$; si falla, pasa a $S_{15}$ como contingencia.
 
-\paragraph{$S_{15}$ — Cálculo de Reembolso en Efectivo.} Emplea el algoritmo \emph{greedy} para devolver la cantidad insertada con monedas de la caja. Si hay monedas suficientes, pasa a $S_{16}$; de lo contrario, registra un adeudo interno y usa $S_{13}$ para mostrar un mensaje al usuario.
+\paragraph{$S_{15}$ — Cálculo de Reembolso en Efectivo.} Llama a \texttt{calculate()} con precio $0$ para devolver la cantidad insertada con monedas de la caja. Si hay monedas suficientes, las descuenta y pasa a $S_{16}$; de lo contrario, registra un adeudo interno y usa $S_{13}$ para mostrar un mensaje al usuario.
 
 \paragraph{$S_{16}$ — Pantalla Final de Reembolso.} Construye un carrusel que notifica la operación cancelada y desglosa el dinero devuelto (saldo en tarjeta o monedas). Al finalizar, retorna a $S_2$.
 
@@ -465,7 +483,7 @@ condici\'on de guarda y su acci\'on asociada.
   \stt{S0\_START}
   \ent encendido del microcontrolador
   \ssep
-  \act \texttt{EEPROM.begin()}; pin de barrera como \texttt{INPUT\_PULLUP}
+  \act cargar y validar la EEPROM (si no es v\'alida, se reinicializa con los datos semilla); pin de barrera como \texttt{INPUT\_PULLUP}
   \ssep
   \sal\\
   EEPROM OK $\to$ S2\\
@@ -529,19 +547,19 @@ condici\'on de guarda y su acci\'on asociada.
   lectura OK, saldo $\ge$ precio y cobro OK $\to$ S7\\
   saldo insuficiente $\to$ S13 (M3)\\
   error de lectura o escritura $\to$ S13 (M3)\\
-  {[B]} o \tin{} $\to$ S2 (sin cargo)
+  {[B]}, {[*]} o \tin{} $\to$ S2 (sin cargo)
 };
 
 \node[sbox] (s5) at (25.2,-12) {
   \stt{S5\_WAIT\_CASH}
   \ent {[A]} efectivo en S4
   \ssep
-  \act monto $=0$; teclas 1--4 = \$1/\$2/\$5/\$10 (suma la moneda al inventario)
+  \act monto $=0$; teclas 1--4 = \$1/\$2/\$5/\$10 (suma la moneda a la caja; si la caja est\'a llena la rechaza)
   \ssep
   \sal\\
   monto $\ge$ precio $\to$ S7\\
-  {[B]} o \tin{}, monto $>0$ $\to$ S15\\
-  {[B]} o \tin{}, monto $=0$ $\to$ S2
+  {[*]} o \tin{}, monto $>0$ $\to$ S15\\
+  {[*]} o \tin{}, monto $=0$ $\to$ S2
 };
 
 \node[sbox] (s7) at (33.6,0) {
@@ -644,7 +662,7 @@ condici\'on de guarda y su acci\'on asociada.
   \stt{S14\_REFUND\_RFID}
   \ent S10 con pago RFID
   \ssep
-  \act \texttt{creditBalance(precio)} (la tarjeta sigue en el lector)
+  \act \texttt{creditBalance(precio)}: reselecciona la tarjeta (debe seguir en el lector), verifica su UID y escribe el saldo
   \ssep
   \sal\\
   escritura OK $\to$ S16\\
@@ -695,7 +713,7 @@ condici\'on de guarda y su acci\'on asociada.
 % S10 -> S14 / S15 ; S5 -> S15 ; S14 -> S15 ; S14 -> S16 ; S15 -> S16
 \draw[rarr] (s10.south) -- node[lbl, right] {2.5 s, RFID} (s14.north);
 \draw[rarr] ($(s10.south)+(-1.6,0)$) -- ++(0,-3.2) -| node[lbl, above, pos=0.2, text width=1.9cm] {2.5 s, efectivo} ($(s15.north)+(1.4,0)$);
-\draw[rarr] (s5.south) -- node[lbl, left, text width=2.5cm] {{[B]} o \tin{}, monto $>0$} (s15.north);
+\draw[rarr] (s5.south) -- node[lbl, left, text width=2.5cm] {{[*]} o \tin{}, monto $>0$} (s15.north);
 \draw[rarr] (s14.west) -- node[lbl, above, text width=1.5cm] {escritura falla} (s15.east);
 \draw[rarr] (s14.east) -- node[lbl, above, text width=1.5cm] {escritura OK} (s16.west);
 \draw[rarr] (s15.south) -- ++(0,-1.8) -| node[lbl, below, pos=0.25] {monedas suficientes} (s16.south);
@@ -707,8 +725,8 @@ condici\'on de guarda y su acci\'on asociada.
 % -> S2
 \draw[arr] ($(s3.north)+(-1.4,0)$) -- node[lbl, left, pos=0.5] {{[*]} / \tin{} /\\canal inv\'alido} ++(0,2.2) node[flagS, above] {S2};
 \draw[arr] ($(s4.north)+(-1.7,0)$) -- node[lbl, left, pos=0.5] {{[*]} / \tin{}} ++(0,2.2) node[flagS, above] {S2};
-\draw[arr] ($(s6.north)+(-1.4,0)$) -- node[lbl, left, pos=0.5] {{[B]} / \tin{}} ++(0,2.2) node[flagS, above] {S2};
-\draw[arr] ($(s5.north)+(0,0)$) -- node[lbl, right, pos=0.5] {{[B]} / \tin{}, monto $=0$} ++(0,2.2) node[flagS, above] {S2};
+\draw[arr] ($(s6.north)+(-1.4,0)$) -- node[lbl, left, pos=0.5] {{[B]} / {[*]} / \tin{}} ++(0,2.2) node[flagS, above] {S2};
+\draw[arr] ($(s5.north)+(0,0)$) -- node[lbl, right, pos=0.5] {{[*]} / \tin{}, monto $=0$} ++(0,2.2) node[flagS, above] {S2};
 \draw[arr] ($(s12.north)+(0,0)$) -- node[lbl, right, pos=0.5] {fin carrusel} ++(0,2.2) node[flagS, above] {S2};
 \draw[arr] (s16.east) -- node[lbl, above, pos=0.5] {fin carrusel} ++(2.4,0) node[flagS, right] {S2};
 
@@ -800,13 +818,13 @@ S4  & {[B]} RFID y lector disponible              & S6  & ---\\
 S4  & {[B]} RFID y lector no disponible           & S13 (M2) & mensaje ``RFID no disponible''; destino S4\\
 S4  & {[*]} o \tin{}                              & S2  & ---\\ \hline
 S5  & monto $\ge$ precio                          & S7  & ---\\
-S5  & {[B]} o \tin{} con monto $>0$               & S15 & monto a devolver $=$ monto insertado\\
-S5  & {[B]} o \tin{} con monto $=0$               & S2  & ---\\ \hline
+S5  & {[*]} o \tin{} con monto $>0$               & S15 & monto a devolver $=$ monto insertado\\
+S5  & {[*]} o \tin{} con monto $=0$               & S2  & ---\\ \hline
 S6  & lectura OK, saldo $\ge$ precio y \texttt{deductBalance} OK & S7 & m\'etodo $=$ RFID; monto $=$ precio; saldo restante $=$ saldo $-$ precio\\
 S6  & lectura OK y saldo $<$ precio               & S13 (M3) & mensaje ``Saldo insuficiente''; destino S2\\
 S6  & \texttt{deductBalance} falla                & S13 (M3) & mensaje ``Error de escritura''; destino S2\\
 S6  & error de autenticaci\'on o lectura          & S13 (M3) & mensaje ``Error al leer''; destino S2\\
-S6  & {[B]} o \tin{}                              & S2  & sin cargo a la tarjeta\\ \hline
+S6  & {[B]}, {[*]} o \tin{}                       & S2  & sin cargo a la tarjeta\\ \hline
 S7  & reserva OK y \texttt{motor.start} OK        & S8  & ---\\
 S7  & \texttt{reserveStock} falla                 & S10 & resultado $=$ rechazado antes de mover\\
 S7  & \texttt{motor.start} falla                  & S10 & resultado $=$ rechazado antes de mover\\ \hline

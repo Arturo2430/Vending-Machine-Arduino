@@ -629,7 +629,11 @@ void VmFsm::processKeyWaitCash(KeyAction a) {
         uint32_t denom = _keypad.coinActionToCentavos(a);
         if (denom == 0u) return;
 
-        if (!_data.addCoins(denom, 1u)) return;
+        // La moneda solo se acepta si la caja la puede registrar
+        if (!_data.addCoins(denom, 1u)) {
+            Serial.println(F("COIN_REJECTED"));
+            return;
+        }
 
         _insertedCentavos += denom;
         resetInactivityTimer();
@@ -762,7 +766,7 @@ void VmFsm::renderCashScreen() {
     snprintf(l2, sizeof(l2), " Insertado: %-9s", moneyBuf);
     snprintf(l3, sizeof(l3), " Faltan:    %-9s", faltaBuf);
 
-    display("  Inserta monedas   ",
+    display("Monedas  [*]Cancelar",
             l2,
             l3,
             "1=$1 2=$2 3=$5 4=$10");

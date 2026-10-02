@@ -33,7 +33,10 @@ El funcionamiento de las teclas **cambia dependiendo de la pantalla (modo) actua
 ### Pantalla de Inicio (Reposo)
 En esta pantalla la máquina muestra los productos y sus precios alternándolos en un carrusel.
 - **Teclas `1`, `2`, `3`, `4`**: Seleccionan el producto de la casilla correspondiente para comprarlo.
-- **Tecla `A`**: Permite ingresar al Menú de Administrador (requiere NIP de 4 dígitos, por defecto `1234`).
+
+### Pantalla de Selección de Producto
+- **Tecla `A`**: Confirmar el producto y pasar a elegir el método de pago.
+- **Tecla `*`**: Cancelar y volver al inicio.
 
 ### Pantalla de Selección de Pago
 Una vez seleccionado el producto, la máquina preguntará cómo deseas pagar.
@@ -41,9 +44,17 @@ Una vez seleccionado el producto, la máquina preguntará cómo deseas pagar.
 - **Tecla `B`**: Elegir pagar con **Tarjeta RFID**.
 - **Tecla `*`**: Cancelar la compra y volver al inicio.
 
+### Pantalla de Efectivo
+- **Teclas `1`, `2`, `3`, `4`**: Simulan la inserción de una moneda de $1, $2, $5 y $10.
+- **Tecla `*`**: Cancelar y recuperar las monedas insertadas.
+
+### Pantalla de Tarjeta RFID
+- **Tecla `B` o `*`**: Cancelar sin cargo y volver al inicio.
+
 ### Pantallas de Mensajes y Alertas
-- **Tecla `A`**: Botón universal de **Continuar** para descartar mensajes de alerta (ej. Producto Agotado o Errores).
-- **Tecla `*`**: Botón universal de **Cancelar / Atrás** en pantallas de espera (ej. Esperando efectivo o RFID).
+- **Tecla `A`**: Botón de **Continuar** para descartar mensajes de alerta (ej. Producto Agotado o Errores).
+
+Si no se pulsa ninguna tecla durante 3 minutos, la máquina cancela la operación y vuelve al inicio (devolviendo las monedas insertadas, si las hay).
 
 ---
 
@@ -63,22 +74,18 @@ Una vez seleccionado el producto, la máquina preguntará cómo deseas pagar.
 ### Opción B: Comprar con Efectivo
 1. En la pantalla de inicio, presiona el número de la casilla del producto deseado (ej. `3` para Agua).
 2. La pantalla mostrará el método de pago. Presiona la tecla **`A`** (Efectivo).
-3. La pantalla mostrará "Inserta monedas". Utiliza las siguientes teclas numéricas para simular la inserción de diferentes denominaciones:
+3. La pantalla mostrará lo insertado, lo que falta y las teclas de monedas. Utiliza las siguientes teclas para simular la inserción de cada denominación (las demás teclas se ignoran):
    - `1` = $1.00 peso
    - `2` = $2.00 pesos
    - `3` = $5.00 pesos
    - `4` = $10.00 pesos
-   - `5` = $20.00 pesos
-   - `6` = $50.00 pesos
-   - `7` = $100.00 pesos
-   - `8` = $200.00 pesos
-   - `9` = $500.00 pesos
-4. Una vez que el saldo insertado alcance o supere el precio del producto, la máquina despachará el producto automáticamente y te calculará tu cambio.
-5. *(Si deseas cancelar e interrumpir la compra antes de completar el monto, presiona la tecla **`*`**. La máquina te devolverá las monedas insertadas calculando tu cambio total).*
+4. Una vez que el saldo insertado alcance o supere el precio del producto, la máquina despachará el producto automáticamente y te entregará el cambio (una pantalla por denominación). Si la caja no puede formar el cambio exacto, se mostrará "No hay cambio" y el monto queda registrado como adeudo para el técnico.
+5. *(Si deseas cancelar antes de completar el monto, presiona la tecla **`*`**. La máquina te devolverá las monedas insertadas).*
 
 ---
 ## 4. Fallos Mecánicos y Reembolsos
-Si el motor intenta girar para despachar el producto pero detecta un problema (atasco o producto atorado), la máquina mostrará una pantalla de "**Falla en proceso. Devolviendo monedas... [A] Continuar**".
-Al presionar la tecla **`A`**:
-- **Si pagaste con efectivo:** La máquina utilizará el algoritmo de cálculo de cambio para devolver físicamente en monedas todo tu saldo introducido.
-- **Si pagaste con RFID:** El monto deducido virtualmente se transformará en monedas físicas y la máquina te regresará el costo del producto en efectivo para evitar que pierdas tu dinero de la tarjeta.
+Si el motor no puede entregar el producto (barrera ocupada, atasco o producto no detectado), la máquina muestra "**Falla en proceso**" durante unos segundos y devuelve el dinero automáticamente, sin pulsar ninguna tecla:
+- **Si pagaste con efectivo:** Se devuelven en monedas todas las monedas insertadas.
+- **Si pagaste con RFID:** Se devuelve el monto cobrado a la tarjeta; **mantén la tarjeta sobre el lector** hasta que termine. Si no es posible escribir en la tarjeta, el monto se devuelve en monedas.
+
+Si la caja no tiene monedas suficientes para el reembolso, se muestra "No hay monedas" y el monto queda registrado como adeudo para el técnico.

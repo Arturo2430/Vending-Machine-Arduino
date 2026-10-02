@@ -117,6 +117,14 @@ RfidWriteResult VmRfid::deductBalance(uint32_t amount) {
 RfidWriteResult VmRfid::creditBalance(uint32_t amount) {
     uint32_t newBalance = _balance + amount;
 
+    // deductBalance() dejo la tarjeta en HALT: hay que seleccionarla de nuevo
+    if (!reselectCard()) {
+        Serial.println(F("[RFID] No se pudo seleccionar la tarjeta para reembolso."));
+        haltCard();
+        _cooldownUntilMs = millis() + VM_RFID_COOLDOWN_MS;
+        return RfidWriteResult::AUTH_FAILED;
+    }
+
     // Re-autenticar
     if (!authenticate(BALANCE_BLOCK)) {
         haltCard();
@@ -146,6 +154,23 @@ RfidWriteResult VmRfid::creditBalance(uint32_t amount) {
 // ---------------------------------------------------------------------------
 // Helpers internos
 // ---------------------------------------------------------------------------
+
+// Despierta la tarjeta en HALT y confirma que sea la misma que se cobro.
+bool VmRfid::reselectCard() {
+    byte atqa[2];
+    byte atqaSize = sizeof(atqa);
+    if (_mfrc.PICC_WakeupA(atqa, &atqaSize) != MFRC522::STATUS_OK) {
+        return false;
+    }
+    if (!_mfrc.PICC_ReadCardSerial()) {
+        return false;
+    }
+
+    char previousUid[VM_RFID_UID_HEX_MAX + 1];
+    memcpy(previousUid, _uidHex, sizeof(previousUid));
+    uidToHex();
+    return strcmp(previousUid, _uidHex) == 0;
+}
 
 bool VmRfid::authenticate(uint8_t block) {
     MFRC522::StatusCode status = _mfrc.PCD_Authenticate(

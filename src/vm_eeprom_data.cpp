@@ -5,10 +5,12 @@
 #include "vm_eeprom_data.h"
 #include "vm_board_config.h"
 
-// Layout EEPROM (v3):
-//  0..2   : MAGIC0 ('S'), MAGIC1 ('A'), VERSION (3)
+// Layout EEPROM (version VERSION):
+//  0..2   : MAGIC0 ('S'), MAGIC1 ('A'), VERSION
 //  3..22  : Caja (4 denominaciones x 5 bytes = 20 bytes)
 //  23..114: Slots (4 slots x 23 bytes = 92 bytes)
+// Si cambia el layout, subir VERSION para reinicializar con los datos semilla.
+// Tambien se reinicializa si los datos leidos no son validos (ver isCacheValid).
 enum {
     OFF_MAGIC0  = 0,
     OFF_MAGIC1  = 1,
@@ -19,7 +21,8 @@ enum {
 
 static const uint8_t MAGIC0  = 'S';
 static const uint8_t MAGIC1  = 'A';
-static const uint8_t VERSION = 6u;
+static const uint8_t VERSION = 7u;
+static const uint8_t COIN_MAX_QTY = 250u;
 
 typedef struct {
     char     name[16];
@@ -111,6 +114,27 @@ void VmEepromData::loadAll() {
     }
 }
 
+// Verifica los datos cargados: denominaciones esperadas y slots coherentes.
+// Una caja con denominaciones distintas rechazaria todas las monedas.
+bool VmEepromData::isCacheValid() const {
+    for (uint8_t i = 0; i < 4; i++) {
+        uint32_t expected;
+        memcpy_P(&expected, &SEED_CASH_DENOMS[i], sizeof(expected));
+        if (_cash[i].denom != expected || _cash[i].qty > COIN_MAX_QTY) {
+            return false;
+        }
+    }
+
+    for (uint8_t i = 0; i < VM_CHANNEL_MAX; i++) {
+        if (_slots[i].price == 0u ||
+            _slots[i].stock > _slots[i].cap ||
+            _slots[i].enabled > 1u) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void VmEepromData::persistAll() {
     ewrite(OFF_MAGIC0,  MAGIC0);
     ewrite(OFF_MAGIC1,  MAGIC1);
@@ -145,7 +169,9 @@ void VmEepromData::persistCash(uint8_t index) {
 bool VmEepromData::begin() {
     if (hasMagic()) {
         loadAll();
-        return true;
+        if (isCacheValid()) {
+            return true;
+        }
     }
     seedCache();
     persistAll();
@@ -196,7 +222,7 @@ bool VmEepromData::addCoins(uint32_t denomCentavos, uint32_t count) {
     for (uint8_t i = 0; i < 4; i++) {
         if (_cash[i].denom == denomCentavos) {
             uint32_t qty = (uint32_t)_cash[i].qty + count;
-            if (qty > 250u) qty = 250u;
+            if (qty > COIN_MAX_QTY) return false;   // caja llena
             _cash[i].qty = (uint8_t)qty;
             persistCash(i);
             return true;

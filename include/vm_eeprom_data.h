@@ -47,6 +47,7 @@ private:
     void loadAll();
     void persistAll();
     bool hasMagic() const;
+    bool isCacheValid() const;
 
     void persistSlot(uint8_t index);
     void persistCash(uint8_t index);

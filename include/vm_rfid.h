@@ -45,6 +45,7 @@ private:
     static const uint8_t BALANCE_BLOCK = 4u;
     MFRC522::MIFARE_Key _key;
 
+    bool reselectCard();
     bool authenticate(uint8_t block);
     bool readBalanceBlock(uint32_t& outBalance);
     bool writeBalanceBlock(uint32_t newBalance);

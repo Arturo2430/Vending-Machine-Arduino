@@ -21,8 +21,10 @@ public:
     VmChangeCalculator();
 
     /**
-     * Calcula el cambio para `paid - price` usando las denominaciones de la
-     * caja. Devuelve true si se formó el cambio y descuenta las monedas.
+     * Calcula el cambio para `paid - price` usando las monedas de la caja.
+     * Con price = 0 calcula el reembolso de `paid`.
+     * Devuelve true y descuenta las monedas solo si el monto se puede formar;
+     * si no, la caja queda sin cambios.
      */
     bool calculate(uint32_t paidCentavos, uint32_t priceCentavos,
                    VmEepromData& cashBox, ChangeResult& result);
