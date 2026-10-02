@@ -70,6 +70,10 @@ pio run -t upload --upload-port /dev/ttyACM0
 - Comentarios en espanol sin acentos, estos deben ser concisos.
 - Variables en ingles.
 
+## Latex
+- Despues de cada compilacion eliminar los archivos residuales que deja el latex
+- Trabajar siempre en `docs/reporte_fsm_vending_machine.tex`
+
 ## Flujo de cambios
 
 1. Leer `README.md`, `platformio.ini` y el módulo afectado antes de editar.

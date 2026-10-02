@@ -97,7 +97,7 @@ Los periféricos que gestiona el sistema son:
 \end{itemize}
 
 El núcleo del firmware es el módulo \texttt{VmFsm}, una Máquina de Estados
-Finitos (FSM) con 13~estados que encapsula toda la lógica de negocio:
+Finitos (FSM) con 17~estados que encapsula toda la lógica de negocio:
 selección de producto, cobro, despacho y cálculo de cambio.
 
 % ===========================================================================
@@ -292,7 +292,7 @@ Ejemplo: si el cambio es \$7.00, el carrusel muestra tres slides:
 \end{itemize}
 
 % ===========================================================================
-\section{Los 13 Estados de la FSM}
+\section{Los 17 Estados de la FSM}
 % ===========================================================================
 
 \subsection{Tabla Resumen}
@@ -310,18 +310,21 @@ $S_1$  & \texttt{S1\_INTERNAL\_ERROR}& Error crítico de EEPROM; sistema detenid
 $S_2$  & \texttt{S2\_STANDBY}        & Carrusel del catálogo (2 slides de 2 productos). & → $S_3$ (tecla 1–4). \\
 $S_3$  & \texttt{S3\_SELECT\_CHANNEL}    & Confirmar producto elegido.  & → $S_4$ [A] / $S_2$ [*] / timeout. \\
 $S_4$  & \texttt{S4\_SELECT\_PAYMENT}     & Elegir método: efectivo o RFID. & → $S_5$ [A] / $S_6$ [B] / $S_2$ [*]. \\
-$S_5$  & \texttt{S5\_WAIT\_CASH} & Acumular monedas (teclas 1–4: \$1/\$2/\$5/\$10). & → $S_7$ (monto $\geq$ precio) / $S_2$ [B] / timeout. \\
+$S_5$  & \texttt{S5\_WAIT\_CASH} & Acumular monedas (teclas 1–4: \$1/\$2/\$5/\$10). & → $S_7$ (monto $\geq$ precio) / $S_{15}$ ([B]/timeout) / $S_2$. \\
 $S_6$  & \texttt{S6\_WAIT\_RFID}     & Sondear RFID y cobrar saldo. & → $S_7$ (OK) / $S_2$ (error/timeout/[B]). \\
 $S_7$  & \texttt{S7\_PREPARING\_VEND}     & Reservar stock y arrancar motor. & → $S_8$ (OK) / $S_{10}$ (motor falló) / $S_2$ (sin stock, 1.5\,s). \\
 $S_8$  & \texttt{S8\_DISPENSING}   & Motor activo; esperar barrera óptica.  & → $S_9$ (barrera OK) / $S_{10}$ (timeout 10\,s). \\
 $S_9$  & \texttt{S9\_CONFIRMED}    & Entrega confirmada; esperar 1\,s. & → $S_{11}$ (efectivo) / $S_{12}$ (RFID). \\
-$S_{10}$& \texttt{S10\_VEND\_ERROR} & Rollback de stock; mensaje de error 3\,s. & → $S_2$. \\
-$S_{11}$& \texttt{S11\_CALC\_CHANGE}& Algoritmo greedy; preparar slides de cambio. & → $S_{12}$ (éxito) / $S_2$ (sin fondos, 5\,s). \\
+$S_{10}$& \texttt{S10\_VEND\_ERROR} & Rollback de stock; mensaje de error 2.5\,s. & → $S_{14}$ (RFID) / $S_{15}$ (efectivo). \\
+$S_{11}$& \texttt{S11\_CALC\_CHANGE}& Algoritmo greedy; preparar slides de cambio. & → $S_{12}$ (éxito) / $S_{13}$ (M4). \\
 $S_{12}$& \texttt{S12\_FINISH\_SCREEN} & Carrusel: éxito + una diapositiva por denominación no nula. & → $S_2$. \\
-$S_{13}$& \texttt{S13\_MESSAGE\_PROMPT} & Estado transitorio no bloqueante para mensajes (espera A). & Depende. \\
+$S_{13}$& \texttt{S13\_MESSAGE\_PROMPT} & Estado transitorio no bloqueante para mensajes (espera A). & Depende del conector M1--M5. \\
+$S_{14}$& \texttt{S14\_REFUND\_RFID} & Devolver monto cobrado a la tarjeta RFID. & → $S_{16}$ (éxito) / $S_{15}$ (falla). \\
+$S_{15}$& \texttt{S15\_REFUND\_CALC} & Calcular devolución de monto usando monedas. & → $S_{16}$ (éxito) / $S_{13}$ (M5). \\
+$S_{16}$& \texttt{S16\_REFUND\_FINISH} & Carrusel: operación cancelada + detalle de reembolso. & → $S_2$. \\
 \bottomrule
 \end{tabular}
-\caption{Los 13 estados de la FSM de la máquina expendedora}
+\caption{Los 17 estados de la FSM de la máquina expendedora}
 \end{table}
 
 \subsection{Descripción Detallada de Cada Estado}
@@ -378,6 +381,12 @@ resumen de cobro RFID. Regresa a $S_2$ al completar todos los slides + 1\,s.
 \paragraph{$S_{13}$ — Prompt de Mensaje.} Estado transitorio no bloqueante para mostrar
 mensajes al usuario y esperar la confirmación. Transita al estado destino configurado
 tras pulsar la tecla \texttt{A}.
+
+\paragraph{$S_{14}$ — Reembolso a Tarjeta RFID.} Intenta devolver el monto cobrado a la tarjeta RFID tras un fallo de motor o cancelación. Si la escritura es exitosa, transita a $S_{16}$; si falla, pasa a $S_{15}$ como contingencia.
+
+\paragraph{$S_{15}$ — Cálculo de Reembolso en Efectivo.} Emplea el algoritmo \emph{greedy} para devolver la cantidad insertada con monedas de la caja. Si hay monedas suficientes, pasa a $S_{16}$; de lo contrario, registra un adeudo interno y usa $S_{13}$ para mostrar un mensaje al usuario.
+
+\paragraph{$S_{16}$ — Pantalla Final de Reembolso.} Construye un carrusel que notifica la operación cancelada y desglosa el dinero devuelto (saldo en tarjeta o monedas). Al finalizar, retorna a $S_2$.
 
 % ===========================================================================
 % Requiere en el preambulo:
@@ -830,8 +839,8 @@ El diseño de la FSM cumple los objetivos de un sistema embebido robusto
 y legible:
 
 \begin{enumerate}
-    \item \textbf{Legibilidad lineal}: los 13 estados están numerados
-          $S_0$–$S_{12}$ y el código fuente sigue el mismo orden de arriba
+    \item \textbf{Legibilidad lineal}: los 17 estados están numerados
+          $S_0$–$S_{16}$ y el código fuente sigue el mismo orden de arriba
           a abajo, facilitando la lectura y el mantenimiento.
     \item \textbf{Sin sobreingeniería}: cada clase tiene una responsabilidad
           única. Se eliminaron el registro transaccional (EEPROM) y el sensor
