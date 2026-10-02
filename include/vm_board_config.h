@@ -23,7 +23,7 @@
 #define VM_LCD_ADDR                0x27u
 #define VM_LCD_COLS                20u
 #define VM_LCD_ROWS                4u
-#define VM_DISPLAY_LINE_LEN        VM_LCD_COLS
+#define VM_DISPLAY_LINE_LEN        (VM_LCD_COLS + 1u)
 #define VM_DISPLAY_LINE_COUNT      VM_LCD_ROWS
 
 // EEPROM

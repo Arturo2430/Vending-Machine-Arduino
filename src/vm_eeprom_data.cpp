@@ -29,7 +29,7 @@ typedef struct {
 } SeedSlot;
 
 static const SeedSlot SEED_SLOTS[VM_CHANNEL_MAX] PROGMEM = {
-    { "Coca-Cola 355ml", 1800u, 8u, 10u },
+    { "Coca-Cola", 1800u, 8u, 10u },
     { "Galletas Marias", 1500u, 6u, 10u },
     { "Agua 600ml",      1200u, 9u, 10u },
     { "Jugo Naranja",    1400u, 5u, 10u },

@@ -28,6 +28,7 @@ public:
     bool begin();
     RfidReadResult poll();
     RfidWriteResult deductBalance(uint32_t amount);
+    RfidWriteResult creditBalance(uint32_t amount);
 
     bool isAvailable() const { return _available; }
     const char* lastUid() const { return _uidHex; }

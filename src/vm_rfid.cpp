@@ -114,6 +114,35 @@ RfidWriteResult VmRfid::deductBalance(uint32_t amount) {
     return RfidWriteResult::OK;
 }
 
+RfidWriteResult VmRfid::creditBalance(uint32_t amount) {
+    uint32_t newBalance = _balance + amount;
+
+    // Re-autenticar
+    if (!authenticate(BALANCE_BLOCK)) {
+        haltCard();
+        _cooldownUntilMs = millis() + VM_RFID_COOLDOWN_MS;
+        return RfidWriteResult::AUTH_FAILED;
+    }
+
+    if (!writeBalanceBlock(newBalance)) {
+        haltCard();
+        _cooldownUntilMs = millis() + VM_RFID_COOLDOWN_MS;
+        return RfidWriteResult::WRITE_FAILED;
+    }
+
+    _balance = newBalance;
+
+    Serial.print(F("[RFID] Saldo devuelto escrito: $"));
+    Serial.print(newBalance / 100u);
+    Serial.print('.');
+    if ((newBalance % 100u) < 10u) Serial.print('0');
+    Serial.println(newBalance % 100u);
+
+    haltCard();
+    _cooldownUntilMs = millis() + VM_RFID_COOLDOWN_MS;
+    return RfidWriteResult::OK;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers internos
 // ---------------------------------------------------------------------------
