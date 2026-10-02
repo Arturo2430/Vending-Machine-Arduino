@@ -14,21 +14,21 @@
 typedef void (*DisplayFn)(const char* line1, const char* line2,
                           const char* line3, const char* line4);
 
+// 13 estados de la FSM
 enum class FsmState : uint8_t {
-    S0_START           = 0,
-    S1_INTERNAL_ERROR  = 1,
-    S2_STANDBY         = 2,
-    S3_SELECT_CHANNEL  = 3,
-    S4_SELECT_PAYMENT  = 4,
-    S5_WAIT_CASH       = 5,
-    S6_WAIT_RFID       = 6,
-    S7_PREPARING_VEND  = 7,
-    S8_DISPENSING      = 8,
-    S9_CONFIRMED       = 9,
-    S10_VEND_ERROR     = 10,
-    S11_CALC_CHANGE    = 11,
-    S12_FINISH_SCREEN  = 12,
-    S13_MESSAGE_PROMPT = 13
+    S0_ARRANQUE      = 0,
+    S1_FALLA_INTERNA = 1,
+    S2_REPOSO        = 2,
+    S3_SEL_CANAL     = 3,
+    S4_SEL_PAGO      = 4,
+    S5_ESP_EFECTIVO  = 5,
+    S6_ESP_RFID      = 6,
+    S7_RESERVADA     = 7,
+    S8_DISPENSANDO   = 8,
+    S9_CONFIRMADA    = 9,
+    S10_FALLA_DISP   = 10,
+    S11_CALC_CAMBIO  = 11,
+    S12_PANTALLA_FIN = 12
 };
 
 class VmFsm {
@@ -74,34 +74,28 @@ private:
     unsigned long _inactivityTimer;
     unsigned long _motorTimer;
 
-    char     _promptLines[4][VM_DISPLAY_LINE_LEN];
-    FsmState _promptNextState;
-
     void enterState(FsmState next);
-    void showMessage(const char* l1, const char* l2, const char* l3, const char* l4, FsmState next);
 
-    void onEnterStart();
-    void onEnterInternalError();
-    void onEnterStandby();
-    void onEnterSelectChannel(uint8_t slot);
-    void onEnterSelectPayment();
-    void onEnterWaitCash();
-    void onEnterWaitRfid();
-    void onEnterPreparingVend();
-    void onEnterDispensing();
-    void onEnterConfirmed();
-    void onEnterVendError();
-    void onEnterCalcChange();
-    void onEnterFinishScreen();
-    void onEnterMessagePrompt();
+    void onEnterArranque();
+    void onEnterFallaInterna();
+    void onEnterReposo();
+    void onEnterSelCanal(uint8_t slot);
+    void onEnterSelPago();
+    void onEnterEspEfectivo();
+    void onEnterEspRfid();
+    void onEnterReservada();
+    void onEnterDispensando();
+    void onEnterConfirmada();
+    void onEnterFallaDisp();
+    void onEnterCalcCambio();
+    void onEnterPantallaFin();
 
-    void processKeyStandby(KeyAction a);
-    void processKeySelectChannel(KeyAction a);
-    void processKeySelectPayment(KeyAction a);
-    void processKeyWaitCash(KeyAction a);
-    void processKeyMessagePrompt(KeyAction a);
+    void processKeyReposo(KeyAction a);
+    void processKeySelCanal(KeyAction a);
+    void processKeySelPago(KeyAction a);
+    void processKeyEspEfectivo(KeyAction a);
 
-    void renderCashScreen();
+    void renderEfectivoScreen();
     void display(const char* l1, const char* l2,
                  const char* l3, const char* l4);
 

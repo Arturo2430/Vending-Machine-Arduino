@@ -380,21 +380,29 @@ mensajes al usuario y esperar la confirmación. Transita al estado destino confi
 tras pulsar la tecla \texttt{A}.
 
 % ===========================================================================
+% Requiere en el preambulo:
+%   \usepackage{tikz}  \usetikzlibrary{arrows.meta,calc}
+%   \usepackage{caption,longtable,array,geometry}
+% ===========================================================================
 \section{Diagrama de Maquina de Estados}
 % ===========================================================================
 
-Cada estado muestra sus condiciones de entrada y de salida con el estado destino.
-La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pagina.
+La m\'aquina de estados tiene 17 estados (S0--S16). Cada estado indica su
+condici\'on de entrada (\textit{Entra}), la acci\'on que ejecuta al entrar
+(\textit{Acci\'on}) y todas sus salidas (\textit{Sale}). La
+Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente
+p\'agina y la Tabla~\ref{tab:transiciones} lista cada transici\'on con su
+condici\'on de guarda y su acci\'on asociada.
 
 \clearpage
-\pdfpagewidth=54cm
-\pdfpageheight=30cm
-\paperwidth=54cm
-\paperheight=30cm
-\textwidth=52cm
-\textheight=28cm
-\vsize=28cm
-\hsize=52cm
+\pdfpagewidth=72cm
+\pdfpageheight=52cm
+\paperwidth=72cm
+\paperheight=52cm
+\textwidth=70cm
+\textheight=50cm
+\vsize=50cm
+\hsize=70cm
 \pdfhorigin=1cm
 \pdfvorigin=1cm
 \oddsidemargin=0cm
@@ -403,267 +411,340 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 \headsep=0cm
 \thispagestyle{empty}
 
+\newcommand{\stt}[1]{\makebox[\linewidth][c]{\textbf{#1}}\\[1pt]\rule{\linewidth}{0.3pt}\\[1pt]}
+\newcommand{\ssep}{\\[1pt]\rule{\linewidth}{0.3pt}\\[1pt]}
+\newcommand{\ent}{\textbf{Entra:}~}
+\newcommand{\act}{\textbf{Acci\'on:}~}
+\newcommand{\sal}{\textbf{Sale:}}
+\newcommand{\tin}{$T_{\mathrm{inact}}$}
+
 \begin{center}
 \tikzset{
   sbox/.style={
     rectangle, rounded corners=4pt,
-    draw=blue!55!black, thick,
-    fill=blue!6,
-    text width=3.8cm,
-    minimum height=3.0cm,
-    align=center,
-    font=\fontsize{6.8}{8.5}\selectfont\sffamily,
-    inner sep=4pt
+    draw=blue!55!black, thick, fill=blue!6,
+    text width=5.4cm, minimum height=4.2cm,
+    align=left, inner sep=4pt,
+    font=\fontsize{7.9}{9.6}\selectfont\sffamily
   },
-  failbox/.style={
-    sbox, fill=red!6, draw=red!55!black
-  },
-  startcirc/.style={
-    circle, fill=black, minimum size=11pt, inner sep=0
-  },
-  arr/.style={
-    ->, >=Stealth, draw=gray!70!black, line width=0.7pt
-  },
-  lbl/.style={
-    font=\fontsize{6.2}{7.5}\selectfont\sffamily,
-    fill=white, inner sep=1.8pt, align=center
-  }
+  refbox/.style={sbox, draw=orange!75!black, fill=orange!12},
+  failbox/.style={sbox, draw=red!60!black, fill=red!8},
+  msgbox/.style={sbox, draw=gray!70!black, fill=gray!14},
+  startcirc/.style={circle, fill=black, minimum size=11pt, inner sep=0},
+  arr/.style={->, >=Stealth, draw=black!65, line width=0.8pt},
+  rarr/.style={->, >=Stealth, draw=orange!75!black, line width=0.9pt},
+  marr/.style={->, >=Stealth, draw=gray!70!black, line width=0.8pt, dash pattern=on 3pt off 2pt},
+  lbl/.style={font=\fontsize{6.6}{8}\selectfont\sffamily, fill=white,
+              inner sep=1.5pt, align=center},
+  flagS/.style={rectangle, rounded corners=2pt, draw=green!45!black, thick,
+                fill=green!14, font=\fontsize{7}{8}\selectfont\bfseries\sffamily,
+                inner sep=2.5pt, minimum width=0.95cm},
+  flagM/.style={rectangle, rounded corners=2pt, draw=gray!70!black, thick,
+                fill=gray!22, font=\fontsize{7}{8}\selectfont\bfseries\sffamily,
+                inner sep=2.5pt, minimum width=0.95cm},
+  flagB/.style={rectangle, rounded corners=2pt, draw=blue!55!black, thick,
+                fill=blue!12, font=\fontsize{7}{8}\selectfont\bfseries\sffamily,
+                inner sep=2.5pt, minimum width=0.95cm}
 }
 
-\begin{tikzpicture}[font=\fontsize{6.8}{8.5}\selectfont\sffamily]
+\begin{tikzpicture}
 
-% Inicio
-\node[startcirc] (start) at (-2.4, 0) {};
+% ---------------------------------------------------------------- ESTADOS
+\node[startcirc] (start) at (0,16.6) {};
 
-% Fila principal y=0
-\node[sbox] (s0) at (0, 0) {
-  \textbf{S0\_START}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} encendido del\\
-  microcontrolador\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
+\node[sbox] (s0) at (0,12) {
+  \stt{S0\_START}
+  \ent encendido del microcontrolador
+  \ssep
+  \act \texttt{EEPROM.begin()}; pin de barrera como \texttt{INPUT\_PULLUP}
+  \ssep
+  \sal\\
   EEPROM OK $\to$ S2\\
   EEPROM falla $\to$ S1
 };
 
-\node[sbox] (s2) at (5.8, 0) {
-  \textbf{S2\_STANDBY}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} arranque / cancel. /\\
-  timeout / error / fin compra\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
+\node[failbox] (s1) at (8.4,12) {
+  \stt{S1\_INTERNAL\_ERROR}
+  \ent \texttt{EEPROM.begin()} retorna \texttt{false}
+  \ssep
+  \act mostrar ``ERROR INTERNO''
+  \ssep
+  \sal{} ninguna\\
+  (bloqueo; requiere reinicio)
+};
+
+\node[sbox, draw=green!45!black, fill=green!8] (s2) at (0,0) {
+  \stt{S2\_STANDBY}
+  \ent S0 con EEPROM OK; salto a S2 desde S3, S4, S5, S6, S12, S13, S16
+  \ssep
+  \act limpiar contexto (monto, m\'etodo de pago, cambio, reembolso); carrusel
+  de canales 1--4 (+ pantalla de adeudo si hay adeudo $>0$)
+  \ssep
+  \sal\\
   tecla 1--4 $\to$ S3
 };
 
-\node[sbox] (s3) at (11.6, 0) {
-  \textbf{S3\_SELECT\_CHANNEL}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} tecla 1--4 en S2\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
+\node[sbox] (s3) at (8.4,0) {
+  \stt{S3\_SELECT\_CHANNEL}
+  \ent tecla 1--4 en S2
+  \ssep
+  \act leer canal en EEPROM
+  \ssep
+  \sal\\
   {[A]} confirmar $\to$ S4\\
-  {[*]} / timeout $\to$ S2
+  {[*]} o \tin{} $\to$ S2\\
+  canal inv\'alido / deshabilitado $\to$ S2\\
+  stock $=0$ $\to$ S13 (M1)
 };
 
-\node[sbox] (s4) at (17.4, 0) {
-  \textbf{S4\_SELECT\_PAYMENT}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} {[A]} en S3\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
+\node[sbox] (s4) at (16.8,0) {
+  \stt{S4\_SELECT\_PAYMENT}
+  \ent {[A]} en S3; o {[A]} en S13 si lo invoc\'o M2
+  \ssep
+  \act mostrar men\'u de pago
+  \ssep
+  \sal\\
   {[A]} efectivo $\to$ S5\\
-  {[B]} RFID $\to$ S6\\
-  {[*]} $\to$ S2
+  {[B]} RFID y lector disponible $\to$ S6\\
+  {[B]} RFID y lector no disp. $\to$ S13 (M2)\\
+  {[*]} o \tin{} $\to$ S2
 };
 
-\node[sbox] (s7) at (25.6, 0) {
-  \textbf{S7\_PREPARING\_VEND}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} monto cubierto\\
-  (efectivo o RFID OK)\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
-  stock OK + motor $\to$ S8\\
-  sin stock (1.5s) $\to$ S2\\
-  motor falla $\to$ S10
+\node[sbox] (s6) at (25.2,12) {
+  \stt{S6\_WAIT\_RFID}
+  \ent {[B]} RFID en S4
+  \ssep
+  \act \texttt{poll()} del lector; si saldo $\ge$ precio: \texttt{deductBalance(precio)}
+  \ssep
+  \sal\\
+  lectura OK, saldo $\ge$ precio y cobro OK $\to$ S7\\
+  saldo insuficiente $\to$ S13 (M3)\\
+  error de lectura o escritura $\to$ S13 (M3)\\
+  {[B]} o \tin{} $\to$ S2 (sin cargo)
 };
 
-\node[sbox] (s8) at (31.4, 0) {
-  \textbf{S8\_DISPENSING}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} motor.start()\\
-  exitoso\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
-  barrera optica $\to$ S9\\
-  timeout 10s $\to$ S10
-};
-
-\node[sbox] (s9) at (37.2, 0) {
-  \textbf{S9\_CONFIRMED}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} barrera optica\\
-  confirma caida\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
-  1s + efectivo $\to$ S11\\
-  1s + RFID $\to$ S12
-};
-
-\node[sbox] (s12) at (43.0, 0) {
-  \textbf{S12\_FINISH\_SCREEN}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} RFID confirmado /\\
-  cambio calculado (S11)\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
-  fin carrusel $\to$ S2
-};
-
-% Fila superior: S5 y S13 (y = +5.2)
-\node[sbox] (s5) at (21.5, 5.2) {
-  \textbf{S5\_WAIT\_CASH}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} {[A]} en S4\\
-  teclas 1--4: \$1/\$2/\$5/\$10\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
+\node[sbox] (s5) at (25.2,-12) {
+  \stt{S5\_WAIT\_CASH}
+  \ent {[A]} efectivo en S4
+  \ssep
+  \act monto $=0$; teclas 1--4 = \$1/\$2/\$5/\$10 (suma la moneda al inventario)
+  \ssep
+  \sal\\
   monto $\ge$ precio $\to$ S7\\
-  {[B]} / timeout $\to$ S2
+  {[B]} o \tin{}, monto $>0$ $\to$ S15\\
+  {[B]} o \tin{}, monto $=0$ $\to$ S2
 };
 
-\node[sbox] (s13) at (31.4, 5.2) {
-  \textbf{S13\_MESSAGE\_PROMPT}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} invocado por\\
-  otros estados\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
-  {[A]} $\to$ estado destino
+\node[sbox] (s7) at (33.6,0) {
+  \stt{S7\_PREPARING\_VEND}
+  \ent pago cubierto (efectivo en S5 o RFID en S6)
+  \ssep
+  \act \texttt{reserveStock(canal)}; \texttt{motor.start(canal)}
+  \ssep
+  \sal\\
+  reserva OK y motor OK $\to$ S8\\
+  reserva falla $\to$ S10\\
+  motor rechaza el arranque $\to$ S10
 };
 
-% Fila inferior (y = -5.2)
-\node[failbox] (s1) at (0, -5.2) {
-  \textbf{S1\_INTERNAL\_ERROR}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} EEPROM.begin()\\
-  falla (retorna false)\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:} ninguna\\
-  (bloqueo del sistema)
+\node[sbox] (s8) at (42,0) {
+  \stt{S8\_DISPENSING}
+  \ent \texttt{motor.start()} exitoso (S7)
+  \ssep
+  \act iniciar temporizador $T_{\mathrm{motor}}$ (10 s)
+  \ssep
+  \sal\\
+  motor termina con \texttt{DELIVERED} (barrera \'optica) $\to$ S9\\
+  motor termina con error $\to$ S10\\
+  $T_{\mathrm{motor}}$ expira: \texttt{motor.stop()} $\to$ S10 (resultado incierto)
 };
 
-\node[sbox] (s6) at (21.5, -5.2) {
-  \textbf{S6\_WAIT\_RFID}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} {[B]} en S4\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
-  RFID OK + saldo $\ge$ precio $\to$ S7\\
-  error / {[B]} / timeout $\to$ S2
+\node[sbox] (s9) at (50.4,0) {
+  \stt{S9\_CONFIRMED}
+  \ent barrera \'optica confirma la ca\'ida del producto
+  \ssep
+  \act el stock reservado pasa a definitivo
+  \ssep
+  \sal\\
+  1 s y pago en efectivo $\to$ S11\\
+  1 s y pago con RFID $\to$ S12
 };
 
-\node[sbox] (s10) at (29.5, -5.2) {
-  \textbf{S10\_VEND\_ERROR}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} motor falla (S7)\\
-  o timeout 10s (S8)\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
-  rollback stock + 3s $\to$ S2
+\node[sbox] (s12) at (58.8,0) {
+  \stt{S12\_FINISH\_SCREEN}
+  \ent S9 (RFID) o S11 (cambio resuelto)
+  \ssep
+  \act carrusel: ``Compra exitosa'' + (cobro RFID \emph{o} monedas de cambio)
+  \ssep
+  \sal\\
+  fin del carrusel ($T_{\mathrm{fin}}$) $\to$ S2
 };
 
-\node[sbox] (s11) at (38.0, -5.2) {
-  \textbf{S11\_CALC\_CHANGE}\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Entra:} 1s en S9\\
-  (pago en efectivo)\\[2pt]
-  \rule{\linewidth}{0.3pt}\\[1pt]
-  \textit{Sale:}\\
-  cambio OK $\to$ S12\\
-  sin fondos (5s) $\to$ S2
+\node[failbox] (s10) at (37.8,-12) {
+  \stt{S10\_VEND\_ERROR}
+  \ent falla en S7 (reserva o motor) o en S8 (error o timeout)
+  \ssep
+  \act liberar stock reservado (si lo hay); monto a devolver = monto pagado;
+  mostrar ``Falla en proceso''
+  \ssep
+  \sal\\
+  2.5 s y pago con RFID $\to$ S14\\
+  2.5 s y pago en efectivo $\to$ S15
 };
 
-% === TRANSICIONES ORTOGONALES ===
+\node[sbox] (s11) at (50.4,-12) {
+  \stt{S11\_CALC\_CHANGE}
+  \ent 1 s en S9 con pago en efectivo
+  \ssep
+  \act cambio = insertado $-$ precio; calcular denominaciones
+  \ssep
+  \sal\\
+  cambio $=0$ $\to$ S12\\
+  cambio $>0$ y monedas suficientes $\to$ S12\\
+  cambio $>0$ y monedas insuficientes $\to$ S13 (M4)
+};
 
-% start -> S0
-\draw[arr] (start) -- (s0.west);
+\node[msgbox, text width=7.4cm] (s13) at (0,-12) {
+  \stt{S13\_MESSAGE\_PROMPT}
+  \ent invocado mediante los conectores M1--M5:\\
+  M1: S3, producto agotado (destino S2)\\
+  M2: S4, RFID no disponible (destino S4)\\
+  M3: S6, saldo insuficiente / error RFID (destino S2)\\
+  M4: S11, sin monedas para cambio (destino S2)\\
+  M5: S15, sin monedas para reembolso (destino S2)
+  \ssep
+  \act mostrar mensaje de 4 l\'ineas; M4 y M5 registran adeudo
+  \ssep
+  \sal\\
+  {[A]} $\to$ estado destino del conector\\
+  \tin{} $\to$ S2
+};
 
-% S0 -> S2
-\draw[arr] (s0.east) -- node[lbl, above] {EEPROM OK} (s2.west);
+\node[refbox] (s15) at (25.2,-24) {
+  \stt{S15\_REFUND\_CALC}
+  \ent S5 cancelada con monto $>0$; S10 con pago en efectivo; S14 fallida
+  \ssep
+  \act calcular denominaciones del monto a devolver (precio $=0$)
+  \ssep
+  \sal\\
+  monedas suficientes $\to$ S16\\
+  monedas insuficientes $\to$ S13 (M5)
+};
 
-% S0 -> S1
-\draw[arr] (s0.south) -- node[lbl, right] {EEPROM falla} (s1.north);
+\node[refbox] (s14) at (37.8,-24) {
+  \stt{S14\_REFUND\_RFID}
+  \ent S10 con pago RFID
+  \ssep
+  \act \texttt{creditBalance(precio)} (la tarjeta sigue en el lector)
+  \ssep
+  \sal\\
+  escritura OK $\to$ S16\\
+  escritura falla $\to$ S15
+};
 
-% S2 -> S3
+\node[refbox] (s16) at (50.4,-24) {
+  \stt{S16\_REFUND\_FINISH}
+  \ent reembolso completado (a tarjeta o en monedas)
+  \ssep
+  \act carrusel: ``Operaci\'on cancelada'' + (saldo devuelto \emph{o} monedas)
+  \ssep
+  \sal\\
+  fin del carrusel ($T_{\mathrm{fin}}$) $\to$ S2
+};
+
+% ------------------------------------------------------- TRANSICIONES
+% arranque
+\draw[arr] (start) -- (s0.north);
+\draw[arr] (s0.south) -- node[lbl, right] {EEPROM OK} (s2.north);
+\draw[arr] (s0.east) -- node[lbl, above] {EEPROM falla} (s1.west);
+
+% flujo de seleccion
 \draw[arr] (s2.east) -- node[lbl, above] {tecla 1--4} (s3.west);
+\draw[arr] (s3.east) -- node[lbl, above] {{[A]} confirmar} (s4.west);
 
-% S3 -> S4
-\draw[arr] (s3.east) -- node[lbl, above] {[A] confirmar} (s4.west);
+% S4 -> S6 (RFID) y S4 -> S5 (efectivo)
+\draw[arr] ($(s4.north)+(1.7,0)$) |- node[lbl, above, pos=0.78] {{[B]} RFID} (s6.west);
+\draw[arr] ($(s4.south)+(1.7,0)$) |- node[lbl, above, pos=0.78] {{[A]} efectivo} (s5.west);
 
-% S3 -> S2 (cancel/timeout)
-\draw[arr] (s3.north) -- ++(0, 1.0) -| node[lbl, above, pos=0.25] {[*] / timeout} ($(s2.north)+(1.2,0)$);
+% S6 -> S7, S5 -> S7
+\draw[arr] (s6.east) -| node[lbl, above, pos=0.2, text width=2.4cm] {lectura OK, saldo OK y cobro OK} (s7.north);
+\draw[arr] (s5.east) -| node[lbl, above, pos=0.2, text width=2.0cm] {monto $\ge$ precio} ($(s7.south)+(-1.5,0)$);
 
-% S4 -> S2 (cancel)
-\draw[arr] ($(s4.north)+(-0.8,0)$) -- ++(0, 1.8) -| node[lbl, above, pos=0.25] {[*] cancelar} ($(s2.north)+(0.6,0)$);
+% S7 -> S8 -> S9 -> S12
+\draw[arr] (s7.east) -- node[lbl, above, text width=1.9cm] {reserva OK y motor OK} (s8.west);
+\draw[arr] (s8.east) -- node[lbl, above, text width=1.9cm] {DELIVERED (barrera)} (s9.west);
+\draw[arr] (s9.east) -- node[lbl, above] {1 s, RFID} (s12.west);
 
-% S4 -> S5 (efectivo)
-\draw[arr] ($(s4.north)+(0.8,0)$) |- node[lbl, left, pos=0.6] {[A] efectivo} (s5.west);
+% S7 -> S10, S8 -> S10
+\draw[arr] ($(s7.south)+(1.2,0)$) -- ++(0,-2.6) -| node[lbl, above, pos=0.2, text width=1.7cm] {reserva o motor falla} ($(s10.north)+(-1.5,0)$);
+\draw[arr] ($(s8.south)+(0,0)$) -- ++(0,-2.6) -| node[lbl, above, pos=0.2, text width=1.7cm] {error o timeout} ($(s10.north)+(1.5,0)$);
 
-% S4 -> S6 (RFID)
-\draw[arr] ($(s4.south)+(0.8,0)$) |- node[lbl, left, pos=0.6] {[B] RFID} (s6.west);
+% S9 -> S11 -> S12
+\draw[arr] (s9.south) -- node[lbl, right] {1 s, efectivo} (s11.north);
+\draw[arr] (s11.east) -| node[lbl, above, pos=0.2, text width=2.0cm] {cambio resuelto} (s12.south);
 
-% S5 -> S7 (monto cubierto)
-\draw[arr] (s5.east) -| node[lbl, right, pos=0.3] {monto $\ge$ precio} ($(s7.north)+(-0.8,0)$);
+% S10 -> S14 / S15 ; S5 -> S15 ; S14 -> S15 ; S14 -> S16 ; S15 -> S16
+\draw[rarr] (s10.south) -- node[lbl, right] {2.5 s, RFID} (s14.north);
+\draw[rarr] ($(s10.south)+(-1.6,0)$) -- ++(0,-3.2) -| node[lbl, above, pos=0.2, text width=1.9cm] {2.5 s, efectivo} ($(s15.north)+(1.4,0)$);
+\draw[rarr] (s5.south) -- node[lbl, left, text width=2.5cm] {{[B]} o \tin{}, monto $>0$} (s15.north);
+\draw[rarr] (s14.west) -- node[lbl, above, text width=1.5cm] {escritura falla} (s15.east);
+\draw[rarr] (s14.east) -- node[lbl, above, text width=1.5cm] {escritura OK} (s16.west);
+\draw[rarr] (s15.south) -- ++(0,-1.8) -| node[lbl, below, pos=0.25] {monedas suficientes} (s16.south);
 
-% S5 -> S2 (cancel/timeout) - ruta alta sobre S5
-\draw[arr] (s5.north) -- ++(0, 1.0) -| node[lbl, above, pos=0.2] {[B] / timeout} ($(s2.north)+(0.0,0)$);
+% S13 -> S2 / S4
+\draw[arr] (s13.north) -- node[lbl, right] {{[A]} o \tin{}, destino S2} (s2.south);
 
-% S6 -> S7 (RFID OK)
-\draw[arr] (s6.east) -| node[lbl, right, pos=0.3] {RFID OK + saldo OK} ($(s7.south)+(-0.8,0)$);
+% ------------------------------------------------ SALTOS (conectores)
+% -> S2
+\draw[arr] ($(s3.north)+(-1.4,0)$) -- node[lbl, left, pos=0.5] {{[*]} / \tin{} /\\canal inv\'alido} ++(0,2.2) node[flagS, above] {S2};
+\draw[arr] ($(s4.north)+(-1.7,0)$) -- node[lbl, left, pos=0.5] {{[*]} / \tin{}} ++(0,2.2) node[flagS, above] {S2};
+\draw[arr] ($(s6.north)+(-1.4,0)$) -- node[lbl, left, pos=0.5] {{[B]} / \tin{}} ++(0,2.2) node[flagS, above] {S2};
+\draw[arr] ($(s5.north)+(0,0)$) -- node[lbl, right, pos=0.5] {{[B]} / \tin{}, monto $=0$} ++(0,2.2) node[flagS, above] {S2};
+\draw[arr] ($(s12.north)+(0,0)$) -- node[lbl, right, pos=0.5] {fin carrusel} ++(0,2.2) node[flagS, above] {S2};
+\draw[arr] (s16.east) -- node[lbl, above, pos=0.5] {fin carrusel} ++(2.4,0) node[flagS, right] {S2};
 
-% S6 -> S2 (error/cancel)
-\draw[arr] (s6.south) -- ++(0, -1.8) -| node[lbl, below, pos=0.2] {error / [B] / timeout} ($(s2.south)+(0.8,0)$);
+% -> S13 (conectores M1..M5)
+\draw[marr] ($(s3.north)+(1.4,0)$) -- node[lbl, right, pos=0.5] {stock $=0$} ++(0,2.2) node[flagM, above] {M1};
+\draw[marr] ($(s4.south)+(-1.7,0)$) -- node[lbl, left, pos=0.5, text width=1.6cm] {lector no disp.} ++(0,-2.2) node[flagM, below] {M2};
+\draw[marr] ($(s6.north)+(1.4,0)$) -- node[lbl, right, pos=0.5, text width=1.8cm] {saldo insuf. / error} ++(0,2.2) node[flagM, above] {M3};
+\draw[marr] (s11.south) -- node[lbl, right, pos=0.5, text width=1.8cm] {sin monedas} ++(0,-2.2) node[flagM, below] {M4};
+\draw[marr] (s15.west) -- node[lbl, above, pos=0.5, text width=1.8cm] {sin monedas} ++(-2.6,0) node[flagM, left] {M5};
 
-% S7 -> S8
-\draw[arr] (s7.east) -- node[lbl, above] {stock OK + motor} (s8.west);
+% S13 -> S4 (retorno del conector M2)
+\draw[marr] (s13.east) -- node[lbl, above, pos=0.5, text width=2.4cm] {{[A]} si lo invoc\'o M2} ++(2.6,0) node[flagB, right] {S4};
 
-% S7 -> S2 (sin stock) - pasa limpiamente por arriba de S5
-\draw[arr] ($(s7.north)+(0.5,0)$) -- ++(0, 6.9) -| node[lbl, above, pos=0.15] {sin stock (1.5s)} ($(s2.north)+(-0.6,0)$);
-
-% S7 -> S10 (motor falla)
-\draw[arr] ($(s7.south)+(0.5,0)$) |- node[lbl, above, pos=0.7] {motor falla} ($(s10.north)+(-0.7,0)$);
-
-% S8 -> S9
-\draw[arr] (s8.east) -- node[lbl, above] {barrera OK} (s9.west);
-
-% S8 -> S10 (timeout 10s)
-\draw[arr] (s8.south) |- node[lbl, above, pos=0.7] {timeout 10s} ($(s10.north)+(0.7,0)$);
-
-% S9 -> S12 (RFID)
-\draw[arr] (s9.east) -- node[lbl, above] {1s + RFID} (s12.west);
-
-% S9 -> S11 (efectivo)
-\draw[arr] (s9.south) -- node[lbl, right] {1s + efectivo} (s11.north);
-
-% S10 -> S2 (rollback)
-\draw[arr] (s10.south) -- ++(0, -1.0) -| node[lbl, below, pos=0.15] {rollback + 3s} ($(s2.south)+(0,0)$);
-
-% S11 -> S12 (cambio OK)
-\draw[arr] (s11.east) -| node[lbl, right, pos=0.4] {cambio OK} (s12.south);
-
-% S11 -> S2 (sin fondos)
-\draw[arr] (s11.south) -- ++(0, -2.6) -| node[lbl, below, pos=0.12] {sin fondos (5s)} ($(s2.south)+(-0.8,0)$);
-
-% S12 -> S2 (fin carrusel) - ruta superior sin cruces
-\draw[arr] (s12.north) -- ++(0, 7.6) -| node[lbl, above, pos=0.12] {fin carrusel $\to$ S2} ($(s2.north)+(-1.2,0)$);
+% ------------------------------------------------------------ LEYENDA
+\node[draw=black!50, rounded corners=3pt, fill=white, inner sep=6pt,
+      text width=26cm, align=left, anchor=north west,
+      font=\fontsize{7.4}{9.2}\selectfont\sffamily] (leyenda) at (36,18.5) {
+  \textbf{Leyenda y convenciones}\\[2pt]
+  \tikz[baseline=-0.5ex]\draw[->,>=Stealth,thick,black!65] (0,0)--(0.8,0);\;
+  transici\'on directa entre estados.\quad
+  \tikz[baseline=-0.5ex]\draw[->,>=Stealth,thick,orange!75!black] (0,0)--(0.8,0);\;
+  transici\'on de reembolso.\\[2pt]
+  \tikz[baseline=-0.5ex]\draw[->,>=Stealth,thick,gray!70!black,dash pattern=on 3pt off 2pt] (0,0)--(0.8,0);\;
+  invocaci\'on de S13 mediante el conector M1--M5 (ver recuadro de S13).\\[2pt]
+  \tikz[baseline=-0.5ex]\node[flagS,font=\fontsize{6}{7}\selectfont\bfseries\sffamily]{S2};\;
+  salto a S2 (se omite la flecha para evitar cruces).\quad
+  \tikz[baseline=-0.5ex]\node[flagB,font=\fontsize{6}{7}\selectfont\bfseries\sffamily]{S4};\;
+  salto a S4.\\[4pt]
+  \textbf{Colores:} azul = flujo de venta; verde = reposo; naranja = reembolso;
+  rojo = error; gris = mensaje.\\[4pt]
+  \textbf{Gu\'ardas:} {[A]}, {[B]}, {[*]} = teclas del teclado;
+  \tin{} = tiempo de inactividad sin pulsar tecla;
+  $T_{\mathrm{motor}}=10$~s (S8); $T_{\mathrm{fin}}=(1+n)\,T_{\mathrm{carrusel}}+1$~s,
+  con $n$ = pantallas de cambio o RFID.\\[4pt]
+  \textbf{Orden de evaluaci\'on:} al entrar a un estado se ejecuta primero su
+  acci\'on de entrada y despu\'es se eval\'uan las salidas; las salidas de un
+  mismo estado son mutuamente excluyentes.\\[4pt]
+  \textbf{Adeudo:} si no hay monedas para devolver (M4, M5) el monto se registra
+  y S2 muestra una pantalla de aviso hasta que el t\'ecnico lo liquide.
+};
 
 \end{tikzpicture}
 \vspace{0.4cm}
 
-\captionof{figure}{Diagrama de estados UML de la FSM de la máquina expendedora (13 estados). Cada estado muestra sus condiciones de entrada (\textit{Entra:}) y de salida (\textit{Sale:}) con el estado destino. Todas las transiciones siguen trayectorias ortogonales.}
+\captionof{figure}{Diagrama de estados UML de la FSM de la m\'aquina expendedora (17 estados). Se distinguen el flujo de venta (azul) y el flujo de reembolso (naranja); los saltos a S2 y las invocaciones de S13 se muestran con conectores para evitar cruces de flechas.}
 \label{fig:estadosuml}
 \end{center}
 
@@ -676,6 +757,70 @@ La Figura~\ref{fig:estadosuml} presenta el diagrama completo en la siguiente pag
 \hsize=15.4cm
 \restoregeometry
 
+% ---------------------------------------------------------------------------
+\subsection{Tabla de transiciones}
+% ---------------------------------------------------------------------------
+
+La Tabla~\ref{tab:transiciones} detalla cada transici\'on del diagrama. Una
+misma fila describe un \'unico evento; las condiciones de un mismo estado de
+origen son mutuamente excluyentes.
+
+{\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{1.0cm}p{5.5cm}p{1.9cm}p{5.5cm}@{}}
+\caption{Transiciones de la FSM.}\label{tab:transiciones}\\
+\hline
+\textbf{Origen} & \textbf{Evento / condici\'on de guarda} & \textbf{Destino} & \textbf{Acci\'on asociada}\\ \hline
+\endfirsthead
+\hline
+\textbf{Origen} & \textbf{Evento / condici\'on de guarda} & \textbf{Destino} & \textbf{Acci\'on asociada}\\ \hline
+\endhead
+\hline
+\endfoot
+S0  & \texttt{EEPROM.begin()} $=$ \texttt{true}  & S2  & configurar pin de barrera\\
+S0  & \texttt{EEPROM.begin()} $=$ \texttt{false} & S1  & ---\\
+S1  & (sin salidas)                               & ---  & bloqueo del sistema\\ \hline
+S2  & tecla 1--4                                  & S3  & seleccionar canal\\ \hline
+S3  & canal inv\'alido o deshabilitado            & S2  & ---\\
+S3  & stock $=0$                                  & S13 (M1) & mensaje ``Producto agotado''; destino S2\\
+S3  & {[A]} confirmar                             & S4  & ---\\
+S3  & {[*]} o \tin{}                              & S2  & ---\\ \hline
+S4  & {[A]} efectivo                              & S5  & ---\\
+S4  & {[B]} RFID y lector disponible              & S6  & ---\\
+S4  & {[B]} RFID y lector no disponible           & S13 (M2) & mensaje ``RFID no disponible''; destino S4\\
+S4  & {[*]} o \tin{}                              & S2  & ---\\ \hline
+S5  & monto $\ge$ precio                          & S7  & ---\\
+S5  & {[B]} o \tin{} con monto $>0$               & S15 & monto a devolver $=$ monto insertado\\
+S5  & {[B]} o \tin{} con monto $=0$               & S2  & ---\\ \hline
+S6  & lectura OK, saldo $\ge$ precio y \texttt{deductBalance} OK & S7 & m\'etodo $=$ RFID; monto $=$ precio; saldo restante $=$ saldo $-$ precio\\
+S6  & lectura OK y saldo $<$ precio               & S13 (M3) & mensaje ``Saldo insuficiente''; destino S2\\
+S6  & \texttt{deductBalance} falla                & S13 (M3) & mensaje ``Error de escritura''; destino S2\\
+S6  & error de autenticaci\'on o lectura          & S13 (M3) & mensaje ``Error al leer''; destino S2\\
+S6  & {[B]} o \tin{}                              & S2  & sin cargo a la tarjeta\\ \hline
+S7  & reserva OK y \texttt{motor.start} OK        & S8  & ---\\
+S7  & \texttt{reserveStock} falla                 & S10 & resultado $=$ rechazado antes de mover\\
+S7  & \texttt{motor.start} falla                  & S10 & resultado $=$ rechazado antes de mover\\ \hline
+S8  & motor termina con \texttt{DELIVERED}        & S9  & ---\\
+S8  & motor termina con error                     & S10 & resultado $=$ c\'odigo del motor\\
+S8  & motor ocupado y $T_{\mathrm{motor}}$ expir\'o & S10 & \texttt{motor.stop()}; resultado $=$ incierto\\ \hline
+S9  & 1 s y pago en efectivo                      & S11 & ---\\
+S9  & 1 s y pago con RFID                         & S12 & cambio $=0$\\ \hline
+S10 & 2.5 s y pago con RFID                       & S14 & monto a devolver $=$ precio\\
+S10 & 2.5 s y pago en efectivo                    & S15 & monto a devolver $=$ monto insertado\\ \hline
+S11 & cambio $=0$                                 & S12 & ---\\
+S11 & cambio $>0$ y monedas suficientes           & S12 & descontar monedas del inventario\\
+S11 & cambio $>0$ y monedas insuficientes         & S13 (M4) & registrar adeudo; destino S2\\ \hline
+S12 & fin del carrusel ($T_{\mathrm{fin}}$)       & S2  & ---\\ \hline
+S13 & {[A]}                                       & destino & destino $=$ el del conector M1--M5\\
+S13 & \tin{}                                      & S2  & ---\\ \hline
+S14 & \texttt{creditBalance} OK                   & S16 & saldo restante $=$ saldo $+$ monto\\
+S14 & \texttt{creditBalance} falla                & S15 & monto a devolver $=$ precio (en monedas)\\ \hline
+S15 & monedas suficientes                         & S16 & descontar monedas del inventario\\
+S15 & monedas insuficientes                       & S13 (M5) & registrar adeudo; destino S2\\ \hline
+S16 & fin del carrusel ($T_{\mathrm{fin}}$)       & S2  & ---\\
+\end{longtable}
+}
 
 % ===========================================================================
 \section{Conclusiones}
