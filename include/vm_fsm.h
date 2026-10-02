@@ -14,7 +14,14 @@
 typedef void (*DisplayFn)(const char* line1, const char* line2,
                           const char* line3, const char* line4);
 
-// 13 estados de la FSM
+// Tiempo que se muestra el aviso de falla en S10 antes de iniciar el reembolso
+#ifndef VM_ERROR_DISPLAY_MS
+#define VM_ERROR_DISPLAY_MS 2500u
+#endif
+
+// 17 estados de la FSM
+//   S0..S13  : flujo de venta, mensajes y errores
+//   S14..S16 : flujo de reembolso (estados explicitos, sin banderas)
 enum class FsmState : uint8_t {
     S0_START           = 0,
     S1_INTERNAL_ERROR  = 1,
@@ -29,7 +36,10 @@ enum class FsmState : uint8_t {
     S10_VEND_ERROR     = 10,
     S11_CALC_CHANGE    = 11,
     S12_FINISH_SCREEN  = 12,
-    S13_MESSAGE_PROMPT = 13
+    S13_MESSAGE_PROMPT = 13,
+    S14_REFUND_RFID    = 14,
+    S15_REFUND_CALC    = 15,
+    S16_REFUND_FINISH  = 16
 };
 
 class VmFsm {
@@ -42,9 +52,17 @@ public:
     void handleKey(char key);
     FsmState currentState() const { return _state; }
 
+    // Adeudo con el cliente (cuando no hubo monedas para cambio / reembolso).
+    // El tecnico lo liquida con clearOwed() una vez devuelto el dinero.
+    uint32_t owedCentavos() const { return _owedCentavos; }
+    void     clearOwed()          { _owedCentavos = 0u; }
+
+    // Constructores de pantallas del carrusel (publicos: los invocan los
+    // trampolines estaticos del .cpp)
     void buildReposoScreen    (uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
     void buildFinSuccessScreen(uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
     void buildFinRfidScreen   (uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
+    void buildFinRefundScreen (uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
     void buildChangeScreen    (uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
 
 private:
@@ -59,44 +77,64 @@ private:
 
     FsmState _state;
 
+    // --- Contexto de la transaccion en curso ---------------------------
     uint8_t      _selectedSlot;
     SlotInfo     _slotInfo;
     uint32_t     _insertedCentavos;
     bool         _stockReserved;
     uint8_t      _pendingResult;
-    uint8_t      _paymentMethod; // 0 = efectivo, 1 = RFID
+    uint8_t      _paymentMethod;      // 0 = efectivo, 1 = RFID
+    uint32_t     _rfidBalanceAfter;
     ChangeResult _changeResult;
 
-    // Desglose de cambio para carrusel en S12 (mayor a menor)
+    // --- Contexto persistente entre transacciones ----------------------
+    uint32_t _owedCentavos;
+
+    // Desglose de monedas para el carrusel (S12 y S16), mayor a menor
     uint32_t _changeDenoms[4];
     uint32_t _changeQtys[4];
     uint8_t  _changeSlides;
+
+    // --- Mensajes (S13) -------------------------------------------------
+    char     _promptLines[4][VM_DISPLAY_LINE_LEN];
+    FsmState _promptNextState;
 
     unsigned long _inactivityTimer;
     unsigned long _motorTimer;
 
     void enterState(FsmState next);
 
-    void onEnterArranque();
-    void onEnterFallaInterna();
-    void onEnterReposo();
-    void onEnterSelCanal(uint8_t slot);
-    void onEnterSelPago();
-    void onEnterEspEfectivo();
-    void onEnterEspRfid();
-    void onEnterReservada();
-    void onEnterDispensando();
-    void onEnterConfirmada();
-    void onEnterFallaDisp();
-    void onEnterCalcCambio();
-    void onEnterPantallaFin();
+    // Acciones de entrada
+    void onEnterStart();
+    void onEnterInternalError();
+    void onEnterStandby();
+    void onEnterSelectChannel(uint8_t slot);
+    void onEnterSelectPayment();
+    void onEnterWaitCash();
+    void onEnterWaitRfid();
+    void onEnterPreparingVend();
+    void onEnterDispensing();
+    void onEnterConfirmed();
+    void onEnterVendError();
+    void onEnterCalcChange();
+    void onEnterFinishScreen();
+    void onEnterMessagePrompt();
+    void onEnterRefundRfid();
+    void onEnterRefundCalc();
+    void onEnterRefundFinish();
 
-    void processKeyReposo(KeyAction a);
-    void processKeySelCanal(KeyAction a);
-    void processKeySelPago(KeyAction a);
-    void processKeyEspEfectivo(KeyAction a);
+    // Teclado
+    void processKeyStandby(KeyAction a);
+    void processKeySelectChannel(KeyAction a);
+    void processKeySelectPayment(KeyAction a);
+    void processKeyWaitCash(KeyAction a);
+    void processKeyMessagePrompt(KeyAction a);
 
-    void renderEfectivoScreen();
+    // Utilidades de pantalla
+    void renderCashScreen();
+    void showMessage(const char* l1, const char* l2, const char* l3,
+                     const char* l4, FsmState next);
+    void addChangeSlides();
     void display(const char* l1, const char* l2,
                  const char* l3, const char* l4);
 
