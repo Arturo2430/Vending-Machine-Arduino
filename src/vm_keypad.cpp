@@ -1,7 +1,8 @@
+#include <avr/pgmspace.h>
 #include "vm_keypad.h"
 
 // Centavos por denominacion, mapeados a SELECT_1..SELECT_4
-static const uint32_t COIN_VALUES[4] = {
+static const uint32_t COIN_VALUES[4] PROGMEM = {
     100u, 200u, 500u, 1000u
 };
 
@@ -48,5 +49,6 @@ uint32_t VmKeypad::coinActionToCentavos(KeyAction action) const {
     if (idx < base || idx > top) {
         return 0u;
     }
-    return COIN_VALUES[idx - base];
+    // Leer Flash explicitamente, incluso si LTO fusiona tablas identicas.
+    return pgm_read_dword(&COIN_VALUES[idx - base]);
 }

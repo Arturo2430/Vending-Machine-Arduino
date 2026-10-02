@@ -106,6 +106,18 @@ pio run                 # compilar
 pio run -t upload       # compilar y cargar por USB
 ```
 
+Para comprobar la conversion de teclas a monedas en el simulador AVR:
+
+```bash
+python test/avr_coin_values/run_test.py
+```
+
+Esta prueba usa AVR-GCC con LTO (optimizacion al enlazar) y AVR-GDB, incluidos
+en la cadena de herramientas de PlatformIO. Verifica las cuatro denominaciones
+y una accion invalida. La tabla de monedas del teclado se guarda en `PROGMEM`
+y se lee con `pgm_read_dword`: en el Mega, Flash y RAM requieren lecturas
+distintas, incluso si el compilador fusiona tablas con valores identicos.
+
 ---
 
 <div align="center">

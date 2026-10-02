@@ -47,6 +47,10 @@ Una vez seleccionado el producto, la máquina preguntará cómo deseas pagar.
 ### Pantalla de Efectivo
 - **Teclas `1`, `2`, `3`, `4`**: Simulan la inserción de una moneda de $1, $2, $5 y $10.
 - **Tecla `*`**: Cancelar y recuperar las monedas insertadas.
+- Cada pulsación agrega una moneda; mantener una tecla presionada no agrega más.
+  Suelta y vuelve a presionar para insertar otra moneda de la misma denominación.
+- Si aparece **"Moneda no aceptada"**, el monto no aumenta porque la caja no pudo
+  registrar esa moneda. Prueba otra denominación o cancela con `*`.
 
 ### Pantalla de Tarjeta RFID
 - **Tecla `B` o `*`**: Cancelar sin cargo y volver al inicio.
@@ -73,7 +77,8 @@ Si no se pulsa ninguna tecla durante 3 minutos, la máquina cancela la operació
 
 ### Opción B: Comprar con Efectivo
 1. En la pantalla de inicio, presiona el número de la casilla del producto deseado (ej. `3` para Agua).
-2. La pantalla mostrará el método de pago. Presiona la tecla **`A`** (Efectivo).
+2. Presiona **`A`** para confirmar el producto. En "Método de pago", presiona
+   **`A`** otra vez para elegir **Efectivo**.
 3. La pantalla mostrará lo insertado, lo que falta y las teclas de monedas. Utiliza las siguientes teclas para simular la inserción de cada denominación (las demás teclas se ignoran):
    - `1` = $1.00 peso
    - `2` = $2.00 pesos
@@ -81,6 +86,26 @@ Si no se pulsa ninguna tecla durante 3 minutos, la máquina cancela la operació
    - `4` = $10.00 pesos
 4. Una vez que el saldo insertado alcance o supere el precio del producto, la máquina despachará el producto automáticamente y te entregará el cambio (una pantalla por denominación). Si la caja no puede formar el cambio exacto, se mostrará "No hay cambio" y el monto queda registrado como adeudo para el técnico.
 5. *(Si deseas cancelar antes de completar el monto, presiona la tecla **`*`**. La máquina te devolverá las monedas insertadas).*
+
+---
+## Diagnóstico del pago en efectivo
+
+Abre el monitor serie a **115200 baudios**. Para entrar al pago del canal 1,
+pulsa y suelta `1`, `A`, `A`. Después, una pulsación de `4` debe mostrar
+"Insertado: $10.00" y producir estos mensajes:
+
+```text
+KEY=4 STATE=S5 ACTION=7
+COIN_ACCEPTED CENTAVOS=1000 TOTAL=1000
+```
+
+`KEY` indica la tecla detectada; `STATE` indica el estado de la compra;
+`ACTION` es el código interno de la acción. `CENTAVOS` y `TOTAL` están en
+centavos: `1000` equivale a $10.00.
+
+Si no aparece `KEY`, revisa el teclado y sus conexiones. Si aparece otra
+tecla, revisa el orden de filas y columnas en `vm_board_config.h`. Si aparece
+`COIN_REJECTED`, la caja no pudo registrar la moneda; no se acredita al cliente.
 
 ---
 ## 4. Fallos Mecánicos y Reembolsos

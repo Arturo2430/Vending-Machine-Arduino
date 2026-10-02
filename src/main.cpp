@@ -58,9 +58,13 @@ void setup() {
 }
 
 void loop() {
-    char key = keypad.getKey();
-    if (key != NO_KEY) {
-        fsm.handleKey(key);
+    if (keypad.getKeys()) {
+        for (uint8_t i = 0; i < LIST_MAX; i++) {
+            // Contar solo nuevas pulsaciones, aunque otra tecla siga activa.
+            if (keypad.key[i].stateChanged && keypad.key[i].kstate == PRESSED) {
+                fsm.handleKey(keypad.key[i].kchar);
+            }
+        }
     }
 
     fsm.update();

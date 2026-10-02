@@ -563,6 +563,14 @@ void VmFsm::handleKey(char key) {
 
     KeyAction action = _keypad.interpret(key, mode);
 
+    // Permite verificar la tecla recibida y el estado que la interpreta.
+    Serial.print(F("KEY="));
+    Serial.print(key);
+    Serial.print(F(" STATE=S"));
+    Serial.print((uint8_t)_state);
+    Serial.print(F(" ACTION="));
+    Serial.println((uint8_t)action);
+
     switch (_state) {
         case FsmState::S2_STANDBY:         processKeyStandby(action);       break;
         case FsmState::S3_SELECT_CHANNEL:  processKeySelectChannel(action); break;
@@ -616,7 +624,7 @@ void VmFsm::processKeySelectPayment(KeyAction a) {
 
 void VmFsm::processKeyWaitCash(KeyAction a) {
     if (a == KeyAction::CANCEL_ABORT) {
-        // [B] con monto > 0 -> S15; con monto = 0 -> S2
+        // [*] con monto > 0 -> S15; con monto = 0 -> S2
         if (_insertedCentavos > 0u) {
             enterState(FsmState::S15_REFUND_CALC);
         } else {
@@ -631,12 +639,19 @@ void VmFsm::processKeyWaitCash(KeyAction a) {
 
         // La moneda solo se acepta si la caja la puede registrar
         if (!_data.addCoins(denom, 1u)) {
-            Serial.println(F("COIN_REJECTED"));
+            Serial.print(F("COIN_REJECTED CENTAVOS="));
+            Serial.println(denom);
+            renderCashScreen("Moneda no aceptada");
             return;
         }
 
         _insertedCentavos += denom;
         resetInactivityTimer();
+
+        Serial.print(F("COIN_ACCEPTED CENTAVOS="));
+        Serial.print(denom);
+        Serial.print(F(" TOTAL="));
+        Serial.println(_insertedCentavos);
 
         if (_insertedCentavos >= _slotInfo.priceCentavos) {
             enterState(FsmState::S7_PREPARING_VEND);
@@ -754,7 +769,7 @@ void VmFsm::buildChangeScreen(uint8_t idx,
 // ===========================================================================
 // Utilidades de pantalla
 // ===========================================================================
-void VmFsm::renderCashScreen() {
+void VmFsm::renderCashScreen(const char* title) {
     uint32_t falta = (_slotInfo.priceCentavos > _insertedCentavos)
                          ? (_slotInfo.priceCentavos - _insertedCentavos) : 0u;
     char moneyBuf[16], faltaBuf[16];
@@ -766,7 +781,7 @@ void VmFsm::renderCashScreen() {
     snprintf(l2, sizeof(l2), " Insertado: %-9s", moneyBuf);
     snprintf(l3, sizeof(l3), " Faltan:    %-9s", faltaBuf);
 
-    display("Monedas  [*]Cancelar",
+    display(title,
             l2,
             l3,
             "1=$1 2=$2 3=$5 4=$10");

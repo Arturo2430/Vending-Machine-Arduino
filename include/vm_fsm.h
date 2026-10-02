@@ -131,7 +131,7 @@ private:
     void processKeyMessagePrompt(KeyAction a);
 
     // Utilidades de pantalla
-    void renderCashScreen();
+    void renderCashScreen(const char* title = "Monedas  [*]Cancelar");
     void showMessage(const char* l1, const char* l2, const char* l3,
                      const char* l4, FsmState next);
     void addChangeSlides();
