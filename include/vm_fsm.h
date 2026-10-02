@@ -16,19 +16,20 @@ typedef void (*DisplayFn)(const char* line1, const char* line2,
 
 // 13 estados de la FSM
 enum class FsmState : uint8_t {
-    S0_ARRANQUE      = 0,
-    S1_FALLA_INTERNA = 1,
-    S2_REPOSO        = 2,
-    S3_SEL_CANAL     = 3,
-    S4_SEL_PAGO      = 4,
-    S5_ESP_EFECTIVO  = 5,
-    S6_ESP_RFID      = 6,
-    S7_RESERVADA     = 7,
-    S8_DISPENSANDO   = 8,
-    S9_CONFIRMADA    = 9,
-    S10_FALLA_DISP   = 10,
-    S11_CALC_CAMBIO  = 11,
-    S12_PANTALLA_FIN = 12
+    S0_START           = 0,
+    S1_INTERNAL_ERROR  = 1,
+    S2_STANDBY         = 2,
+    S3_SELECT_CHANNEL  = 3,
+    S4_SELECT_PAYMENT  = 4,
+    S5_WAIT_CASH       = 5,
+    S6_WAIT_RFID       = 6,
+    S7_PREPARING_VEND  = 7,
+    S8_DISPENSING      = 8,
+    S9_CONFIRMED       = 9,
+    S10_VEND_ERROR     = 10,
+    S11_CALC_CHANGE    = 11,
+    S12_FINISH_SCREEN  = 12,
+    S13_MESSAGE_PROMPT = 13
 };
 
 class VmFsm {
