@@ -5,9 +5,10 @@
 #include <MFRC522.h>
 #include "vm_board_config.h"
 
-// Saldo guardado en Sector 1, Bloque 4 (primeros 4 bytes, uint32_t little-endian)
+// Sector 1, Bloque 4: saldo en 4 bytes
 #define VM_RFID_UID_HEX_MAX 20u
 
+// Resultados de lectura de tarjeta
 enum class RfidReadResult : uint8_t {
     NONE,
     OK,
@@ -15,6 +16,7 @@ enum class RfidReadResult : uint8_t {
     READ_FAILED
 };
 
+// Resultados de escritura de saldo
 enum class RfidWriteResult : uint8_t {
     OK,
     AUTH_FAILED,

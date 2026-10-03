@@ -5,12 +5,7 @@
 #include "vm_eeprom_data.h"
 #include "vm_board_config.h"
 
-// Layout EEPROM (version VERSION):
-//  0..2   : MAGIC0 ('S'), MAGIC1 ('A'), VERSION
-//  3..22  : Caja (4 denominaciones x 5 bytes = 20 bytes)
-//  23..114: Slots (4 slots x 23 bytes = 92 bytes)
-// Si cambia el layout, subir VERSION para reinicializar con los datos semilla.
-// Tambien se reinicializa si los datos leidos no son validos (ver isCacheValid).
+// Estructura EEPROM: Magic(3), Caja(20), Slots(92). Incrementar VERSION reinicia datos
 enum {
     OFF_MAGIC0  = 0,
     OFF_MAGIC1  = 1,
@@ -21,7 +16,7 @@ enum {
 
 static const uint8_t MAGIC0  = 'S';
 static const uint8_t MAGIC1  = 'A';
-static const uint8_t VERSION = 7u;
+static const uint8_t VERSION = 8u;
 static const uint8_t COIN_MAX_QTY = 250u;
 
 typedef struct {
@@ -32,10 +27,10 @@ typedef struct {
 } SeedSlot;
 
 static const SeedSlot SEED_SLOTS[VM_CHANNEL_MAX] PROGMEM = {
-    { "Coca-Cola", 1800u, 8u, 10u },
-    { "Galletas Marias", 1500u, 6u, 10u },
-    { "Agua 600ml",      1200u, 9u, 10u },
-    { "Jugo Naranja",    1400u, 5u, 10u },
+    { "Takis",   1800u, 8u, 10u },
+    { "Doritos", 1500u, 6u, 10u },
+    { "Snicker", 1200u, 9u, 10u },
+    { "Kranky",  1400u, 5u, 10u },
 };
 
 static const uint32_t SEED_CASH_DENOMS[4] PROGMEM = { 100u, 200u, 500u, 1000u };
@@ -114,8 +109,7 @@ void VmEepromData::loadAll() {
     }
 }
 
-// Verifica los datos cargados: denominaciones esperadas y slots coherentes.
-// Una caja con denominaciones distintas rechazaria todas las monedas.
+// Verifica coherencia de denominaciones y slots cargados desde memoria
 bool VmEepromData::isCacheValid() const {
     for (uint8_t i = 0; i < 4; i++) {
         uint32_t expected;
@@ -222,7 +216,7 @@ bool VmEepromData::addCoins(uint32_t denomCentavos, uint32_t count) {
     for (uint8_t i = 0; i < 4; i++) {
         if (_cash[i].denom == denomCentavos) {
             uint32_t qty = (uint32_t)_cash[i].qty + count;
-            if (qty > COIN_MAX_QTY) return false;   // caja llena
+            if (qty > COIN_MAX_QTY) return false; // Caja de monedas llena
             _cash[i].qty = (uint8_t)qty;
             persistCash(i);
             return true;

@@ -9,12 +9,8 @@
 static const uint8_t  DENOM_COUNT = 4;
 static const uint32_t DENOMS[DENOM_COUNT] = { 1000u, 500u, 200u, 100u };
 
-// Busca cuantas monedas usar de cada denominacion (mayor a menor) para
-// sumar exactamente `total`. Prueba primero la mayor cantidad posible y
-// retrocede si el resto no se puede completar con las monedas restantes.
-static bool findCoins(uint32_t total, uint8_t idx,
-                      const uint32_t avail[DENOM_COUNT],
-                      uint32_t use[DENOM_COUNT]) {
+// Algoritmo de backtracking para dar cambio exacto con el inventario disponible
+static bool findCoins(uint32_t total, uint8_t idx, const uint32_t avail[DENOM_COUNT], uint32_t use[DENOM_COUNT]) {
     uint32_t denom = DENOMS[idx];
 
     // Ultima denominacion: debe cubrir el resto exacto
@@ -42,11 +38,8 @@ static bool findCoins(uint32_t total, uint8_t idx,
 VmChangeCalculator::VmChangeCalculator() {
 }
 
-// Con priceCentavos = 0 se calcula un reembolso del monto pagado.
-bool VmChangeCalculator::calculate(uint32_t paidCentavos,
-                                   uint32_t priceCentavos,
-                                   VmEepromData& cashBox,
-                                   ChangeResult& result) {
+// Con priceCentavos = 0 se calcula un reembolso del monto pagado
+bool VmChangeCalculator::calculate(uint32_t paidCentavos, uint32_t priceCentavos, VmEepromData& cashBox, ChangeResult& result) {
     result.coin1000 = 0;
     result.coin500  = 0;
     result.coin200  = 0;
@@ -70,8 +63,7 @@ bool VmChangeCalculator::calculate(uint32_t paidCentavos,
         use[i] = 0u;
     }
 
-    // Primero se verifica que se pueda formar el monto; asi la caja no se
-    // modifica si el cambio no es posible.
+    // Verifica disponibilidad antes de descontar para mantener consistencia
     if (!findCoins(total, 0u, avail, use)) {
         Serial.println(F("CHANGE_ERROR_CALC_NOT_POSSIBLE"));
         return false;

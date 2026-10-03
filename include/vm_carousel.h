@@ -1,9 +1,4 @@
-/**
- * @file vm_carousel.h
- * @brief Carrusel de subpantallas del LCD 20x4.
- *
- * Llama a una función de construcción cada VM_CAROUSEL_INTERVAL_MS milisegundos.
- */
+// Carrusel de pantallas alternantes en el LCD
 
 #ifndef VM_CAROUSEL_H
 #define VM_CAROUSEL_H

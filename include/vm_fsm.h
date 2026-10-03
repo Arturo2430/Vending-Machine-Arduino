@@ -11,17 +11,16 @@
 #include "vm_motor_controller.h"
 #include "vm_rfid.h"
 
+// Puntero a funcion de impresion en LCD
 typedef void (*DisplayFn)(const char* line1, const char* line2,
                           const char* line3, const char* line4);
 
-// Tiempo que se muestra el aviso de falla en S10 antes de iniciar el reembolso
+// Tiempo del aviso de falla antes de reembolsar
 #ifndef VM_ERROR_DISPLAY_MS
 #define VM_ERROR_DISPLAY_MS 2500u
 #endif
 
-// 17 estados de la FSM
-//   S0..S13  : flujo de venta, mensajes y errores
-//   S14..S16 : flujo de reembolso (estados explicitos, sin banderas)
+// Estados de la maquina expendedora
 enum class FsmState : uint8_t {
     S0_START           = 0,
     S1_INTERNAL_ERROR  = 1,
@@ -42,6 +41,7 @@ enum class FsmState : uint8_t {
     S16_REFUND_FINISH  = 16
 };
 
+// Logica principal de estados de la maquina
 class VmFsm {
 public:
     VmFsm(VmEepromData& data, VmMotorController& motor, VmRfid& rfid,
@@ -52,13 +52,11 @@ public:
     void handleKey(char key);
     FsmState currentState() const { return _state; }
 
-    // Adeudo con el cliente (cuando no hubo monedas para cambio / reembolso).
-    // El tecnico lo liquida con clearOwed() una vez devuelto el dinero.
+    // Manejo de saldos adeudados por falta de cambio
     uint32_t owedCentavos() const { return _owedCentavos; }
     void     clearOwed()          { _owedCentavos = 0u; }
 
-    // Constructores de pantallas del carrusel (publicos: los invocan los
-    // trampolines estaticos del .cpp)
+    // Generadores de vistas para el carrusel
     void buildReposoScreen    (uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
     void buildFinSuccessScreen(uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
     void buildFinRfidScreen   (uint8_t idx, char lines[LCD_LINE_COUNT][LCD_LINE_LEN]);
@@ -77,25 +75,25 @@ private:
 
     FsmState _state;
 
-    // --- Contexto de la transaccion en curso ---------------------------
+    // Estado local de la transaccion
     uint8_t      _selectedSlot;
     SlotInfo     _slotInfo;
     uint32_t     _insertedCentavos;
     bool         _stockReserved;
     uint8_t      _pendingResult;
-    uint8_t      _paymentMethod;      // 0 = efectivo, 1 = RFID
+    uint8_t      _paymentMethod;
     uint32_t     _rfidBalanceAfter;
     ChangeResult _changeResult;
 
-    // --- Contexto persistente entre transacciones ----------------------
+    // Estado persistente
     uint32_t _owedCentavos;
 
-    // Desglose de monedas para el carrusel (S12 y S16), mayor a menor
+    // Monedas devueltas para impresion
     uint32_t _changeDenoms[4];
     uint32_t _changeQtys[4];
     uint8_t  _changeSlides;
 
-    // --- Mensajes (S13) -------------------------------------------------
+    // Buffer de mensajes genericos
     char     _promptLines[4][VM_DISPLAY_LINE_LEN];
     FsmState _promptNextState;
 
@@ -104,7 +102,7 @@ private:
 
     void enterState(FsmState next);
 
-    // Acciones de entrada
+    // Eventos al entrar a un estado
     void onEnterStart();
     void onEnterInternalError();
     void onEnterStandby();
@@ -123,14 +121,14 @@ private:
     void onEnterRefundCalc();
     void onEnterRefundFinish();
 
-    // Teclado
+    // Eventos de teclado por estado
     void processKeyStandby(KeyAction a);
     void processKeySelectChannel(KeyAction a);
     void processKeySelectPayment(KeyAction a);
     void processKeyWaitCash(KeyAction a);
     void processKeyMessagePrompt(KeyAction a);
 
-    // Utilidades de pantalla
+    // Utilidades graficas
     void renderCashScreen(const char* title = "Monedas  [*]Cancelar");
     void showMessage(const char* l1, const char* l2, const char* l3,
                      const char* l4, FsmState next);

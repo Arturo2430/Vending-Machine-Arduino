@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+// Modos de operacion del teclado
 enum class KeyMode : uint8_t {
     STANDBY = 0,
     PAYMENT = 1,
@@ -10,6 +11,7 @@ enum class KeyMode : uint8_t {
     PROMPT  = 3
 };
 
+// Acciones mapeadas desde las teclas fisicas
 enum class KeyAction : uint8_t {
     IGNORE_KEY   = 0,
     CANCEL_ABORT = 1,
@@ -22,6 +24,7 @@ enum class KeyAction : uint8_t {
     CONTINUE     = 19
 };
 
+// Traductor de teclas fisicas a acciones logicas
 class VmKeypad {
 public:
     VmKeypad();

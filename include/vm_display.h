@@ -1,9 +1,4 @@
-/**
- * @file vm_display.h
- * @brief LCD 20x4 I2C para la máquina expendedora (Hugo de León).
- *
- * Expone show() que recibe 4 líneas de texto y las presenta en la pantalla LCD.
- */
+// Controlador de pantalla LCD 20x4 via I2C
 
 #ifndef VM_DISPLAY_H
 #define VM_DISPLAY_H

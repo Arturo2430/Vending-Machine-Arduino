@@ -97,9 +97,7 @@ int VmMotorController::consumeResult() {
     return -1;
 }
 
-void VmMotorController::setMotorPWM(uint8_t channel,
-                                    uint16_t pwm,
-                                    bool forward) {
+void VmMotorController::setMotorPWM(uint8_t channel, uint16_t pwm, bool forward) {
     if (channel < 1u || channel > VM_MOTOR_COUNT) {
         return;
     }
@@ -124,9 +122,7 @@ void VmMotorController::setMotorPWM(uint8_t channel,
 }
 
 void VmMotorController::stopAll() {
-    for (uint8_t channel = 1u;
-         channel <= VM_MOTOR_COUNT;
-         channel++) {
+    for (uint8_t channel = 1u; channel <= VM_MOTOR_COUNT; channel++) {
         uint8_t index = channel - 1u;
 
         _pca.setPWM(VM_MOTOR_IN_A[index], 0u, 0u);
