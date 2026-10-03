@@ -21,7 +21,7 @@ static const uint8_t VM_MOTOR_IN_B[VM_MOTOR_COUNT] = {
 };
 
 static const bool VM_MOTOR_DIRECTION_INVERTED[VM_MOTOR_COUNT] = {
-    false, false, false, false  //indica si la direccion del motor es invertida (true va hacia la izquierda, false va hacia la derecha)
+    true, false, true, true  //indica si la direccion del motor es invertida (true va hacia la izquierda, false va hacia la derecha)
 };
 
 #endif
